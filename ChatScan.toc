@@ -1,6 +1,6 @@
 ## Interface: 11570
 ## Title: ChatScan
-## Notes: Keyword scanner for chat channels. Click the minimap button to configure.
+## Notes: Scan chat channels for keyword groups (OR across rows, AND within a row). Open with /cs or the minimap button.
 ## Author: MIYANKO
 ## Version: 1.0.0
 ## SavedVariables: ChatScanDB
