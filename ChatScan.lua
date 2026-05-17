@@ -43,6 +43,9 @@ end
 
 local function loadStore()
     ChatScanDB = ChatScanDB or {}
+    if type(ChatScanDB.minimap) ~= "table" then
+        ChatScanDB.minimap = { hide = false, minimapPos = 195 }
+    end
     local key = playerKey()
     ChatScanDB[key] = ChatScanDB[key] or {
         inputChannels = {},
@@ -673,15 +676,28 @@ local function setupMinimapButton()
     LDBIcon:Register(ADDON_NAME, dataObject, ChatScanDB.minimap)
 end
 
+SLASH_CHATSCAN1 = "/cs"
+SLASH_CHATSCAN2 = "/chatscan"
+SlashCmdList["CHATSCAN"] = function(msg)
+    local cmd = (msg or ""):match("^%s*(.-)%s*$"):lower()
+    if cmd == "start" then
+        if not scanning and startScan() and panel then
+            panel.refreshStartBtn()
+        end
+    elseif cmd == "stop" then
+        stopScan()
+        if panel then panel.refreshStartBtn() end
+    else
+        togglePanel()
+    end
+end
+
 local loader = CreateFrame("Frame")
 loader:RegisterEvent("ADDON_LOADED")
 loader:RegisterEvent("PLAYER_LOGIN")
 loader:SetScript("OnEvent", function(_, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
         loadStore()
-        if type(ChatScanDB.minimap) ~= "table" then
-            ChatScanDB.minimap = { hide = false, minimapPos = 195 }
-        end
     elseif event == "PLAYER_LOGIN" then
         setupMinimapButton()
         local store = loadStore()
