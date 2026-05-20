@@ -402,12 +402,8 @@ function layoutKeywordRows()
     end
     local total = math.max(#keywordRowsActive * rowHeight - 4, 20)
     keywordsContainer:SetHeight(total)
-    if panel and panel.lastRowsHeight then
-        local delta = total - panel.lastRowsHeight
-        if delta ~= 0 then
-            panel:SetHeight(panel:GetHeight() + delta)
-        end
-        panel.lastRowsHeight = total
+    if panel and panel.resizePanel then
+        panel.resizePanel()
     end
     return total
 end
@@ -438,9 +434,96 @@ local function populateRows(store)
     end
 end
 
+-- Panel chrome (shared visual style across the addon's panels).
+local PANEL_PAD = 14
+local PANEL_PAD_TOP = 52       -- clears the dialog-box-header banner above the first section.
+local PANEL_PAD_BOTTOM = 14
+local SECTION_GAP = 22
+local SECTION_INNER_PAD = 12
+local SECTION_LABEL_LIFT = 7
+local HELPER_GAP = 8
+local BTN_H = 22
+
+-- Native Blizzard dialog-frame backdrop (matches AceGUI Frame, which is what
+-- Questie's options panel uses). DialogBox-Border has the metallic look with
+-- decorative corners; DialogBox-Background is the standard tan parchment.
+local function applyPanelBackdrop(frame)
+    frame:SetBackdrop({
+        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+        tile = true,
+        tileSize = 32,
+        edgeSize = 32,
+        insets = { left = 8, right = 8, top = 8, bottom = 8 },
+    })
+end
+
+-- Native Blizzard dialog-box header banner (Interface\DialogFrame\UI-DialogBox-Header)
+-- composed as three texture pieces (left cap, repeating middle, right cap),
+-- centered at the parent's top edge and overlapping into the frame interior.
+-- Same texture coords AceGUI uses for its Frame title.
+local function buildTitleHeader(parent, text)
+    local HEADER_TEXTURE = "Interface\\DialogFrame\\UI-DialogBox-Header"
+
+    local mid = parent:CreateTexture(nil, "OVERLAY")
+    mid:SetTexture(HEADER_TEXTURE)
+    mid:SetTexCoord(0.31, 0.67, 0, 0.63)
+    mid:SetPoint("TOP", parent, "TOP", 0, 12)
+    mid:SetHeight(40)
+
+    local left = parent:CreateTexture(nil, "OVERLAY")
+    left:SetTexture(HEADER_TEXTURE)
+    left:SetTexCoord(0.21, 0.31, 0, 0.63)
+    left:SetPoint("RIGHT", mid, "LEFT")
+    left:SetWidth(30)
+    left:SetHeight(40)
+
+    local right = parent:CreateTexture(nil, "OVERLAY")
+    right:SetTexture(HEADER_TEXTURE)
+    right:SetTexCoord(0.67, 0.77, 0, 0.63)
+    right:SetPoint("LEFT", mid, "RIGHT")
+    right:SetWidth(30)
+    right:SetHeight(40)
+
+    local title = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    title:SetPoint("TOP", mid, "TOP", 0, -14)
+    title:SetText(text)
+
+    mid:SetWidth((title:GetStringWidth() or 0) + 10)
+
+    return mid
+end
+
+-- Nested section box (matches AceGUI InlineGroup): flat dark bg + tooltip border.
+local function buildSection(parent, labelText)
+    local section = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    section:SetBackdrop({
+        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true,
+        tileSize = 16,
+        edgeSize = 16,
+        insets = { left = 3, right = 3, top = 5, bottom = 3 },
+    })
+    section:SetBackdropColor(0.1, 0.1, 0.1, 0.5)
+    section:SetBackdropBorderColor(0.4, 0.4, 0.4)
+
+    local label = section:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    label:SetPoint("BOTTOMLEFT", section, "TOPLEFT", 12, SECTION_LABEL_LIFT)
+    label:SetText(labelText)
+    section.label = label
+
+    local body = CreateFrame("Frame", nil, section)
+    body:SetPoint("TOPLEFT", section, "TOPLEFT", SECTION_INNER_PAD, -SECTION_INNER_PAD)
+    body:SetPoint("BOTTOMRIGHT", section, "BOTTOMRIGHT", -SECTION_INNER_PAD, SECTION_INNER_PAD)
+    section.body = body
+
+    return section
+end
+
 local function buildPanel()
     local f = CreateFrame("Frame", "ChatScanPanel", UIParent, "BackdropTemplate")
-    f:SetSize(360, 460)
+    f:SetSize(380, 1)
     f:SetPoint("CENTER")
     f:SetFrameStrata("DIALOG")
     f:SetMovable(true)
@@ -449,63 +532,48 @@ local function buildPanel()
     f:SetScript("OnDragStart", f.StartMoving)
     f:SetScript("OnDragStop", f.StopMovingOrSizing)
     f:SetClampedToScreen(true)
-    if f.SetBackdrop then
-        f:SetBackdrop({
-            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile = true, tileSize = 16, edgeSize = 16,
-            insets = { left = 4, right = 4, top = 4, bottom = 4 },
-        })
-        f:SetBackdropColor(0, 0, 0, 0.9)
-    end
+    applyPanelBackdrop(f)
+
+    buildTitleHeader(f, "Chat Scan")
 
     local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", -2, -2)
 
-    local PAD = 12
-    local SECTION_GAP = 12
-    local LABEL_GAP = 4
-    local HELPER_GAP = 8
-    local BTN_H = 22
-    local TITLE_TO_LABEL = 24
+    -- Channels section
+    local channelsSection = buildSection(f, "Channels")
+    channelsSection:SetPoint("TOPLEFT", f, "TOPLEFT", PANEL_PAD, -PANEL_PAD_TOP)
+    channelsSection:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PANEL_PAD, -PANEL_PAD_TOP)
 
-    local title = f:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-    title:SetPoint("TOP", 0, -PAD)
-    title:SetText("Chat Scan")
-
-    local channelsLabel = f:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    channelsLabel:SetPoint("TOPLEFT", PAD, -(PAD + TITLE_TO_LABEL))
-    channelsLabel:SetText("Channels")
-
-    local channelsHelper = f:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    channelsHelper:SetPoint("TOPLEFT", channelsLabel, "BOTTOMLEFT", 0, -LABEL_GAP)
-    channelsHelper:SetPoint("RIGHT", f, "RIGHT", -PAD, 0)
+    local channelsHelper = channelsSection.body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    channelsHelper:SetPoint("TOPLEFT", channelsSection.body, "TOPLEFT", 0, 0)
+    channelsHelper:SetPoint("RIGHT", channelsSection.body, "RIGHT", 0, 0)
     channelsHelper:SetJustifyH("LEFT")
     channelsHelper:SetWordWrap(true)
     channelsHelper:SetText("Pick which chat channels to scan for keyword matches.")
 
-    local channelContainer = CreateFrame("Frame", nil, f)
+    local channelContainer = CreateFrame("Frame", nil, channelsSection.body)
     channelContainer:SetPoint("TOPLEFT", channelsHelper, "BOTTOMLEFT", 0, -HELPER_GAP)
-    channelContainer:SetPoint("RIGHT", f, "RIGHT", -PAD, 0)
+    channelContainer:SetPoint("RIGHT", channelsSection.body, "RIGHT", 0, 0)
     channelContainer:SetHeight(20)
 
-    local keywordsLabel = f:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    keywordsLabel:SetPoint("TOPLEFT", channelContainer, "BOTTOMLEFT", 0, -SECTION_GAP)
-    keywordsLabel:SetText("Keywords")
+    -- Keywords section
+    local keywordsSection = buildSection(f, "Keywords")
+    keywordsSection:SetPoint("TOPLEFT", channelsSection, "BOTTOMLEFT", 0, -SECTION_GAP)
+    keywordsSection:SetPoint("TOPRIGHT", channelsSection, "BOTTOMRIGHT", 0, -SECTION_GAP)
 
-    local keywordsHelper = f:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    keywordsHelper:SetPoint("TOPLEFT", keywordsLabel, "BOTTOMLEFT", 0, -LABEL_GAP)
-    keywordsHelper:SetPoint("RIGHT", f, "RIGHT", -PAD, 0)
+    local keywordsHelper = keywordsSection.body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    keywordsHelper:SetPoint("TOPLEFT", keywordsSection.body, "TOPLEFT", 0, 0)
+    keywordsHelper:SetPoint("RIGHT", keywordsSection.body, "RIGHT", 0, 0)
     keywordsHelper:SetJustifyH("LEFT")
     keywordsHelper:SetWordWrap(true)
     keywordsHelper:SetText("Each row matches independently (OR). Inside a row, separate keywords with commas to require all of them (AND).")
 
-    keywordsContainer = CreateFrame("Frame", nil, f)
+    keywordsContainer = CreateFrame("Frame", nil, keywordsSection.body)
     keywordsContainer:SetPoint("TOPLEFT", keywordsHelper, "BOTTOMLEFT", 0, -HELPER_GAP)
-    keywordsContainer:SetPoint("RIGHT", f, "RIGHT", -PAD, 0)
+    keywordsContainer:SetPoint("RIGHT", keywordsSection.body, "RIGHT", 0, 0)
     keywordsContainer:SetHeight(20)
 
-    keywordAddBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    keywordAddBtn = CreateFrame("Button", nil, keywordsSection.body, "UIPanelButtonTemplate")
     keywordAddBtn:SetSize(140, BTN_H)
     keywordAddBtn:SetPoint("TOPLEFT", keywordsContainer, "BOTTOMLEFT", 0, -HELPER_GAP)
     keywordAddBtn:SetText("Add keyword group")
@@ -514,29 +582,31 @@ local function buildPanel()
         layoutKeywordRows()
     end)
 
-    local outputsLabel = f:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    outputsLabel:SetPoint("TOPLEFT", keywordAddBtn, "BOTTOMLEFT", 0, -SECTION_GAP)
-    outputsLabel:SetText("Channel Match Display")
+    -- Outputs section
+    local outputsSection = buildSection(f, "Channel Match Display")
+    outputsSection:SetPoint("TOPLEFT", keywordsSection, "BOTTOMLEFT", 0, -SECTION_GAP)
+    outputsSection:SetPoint("TOPRIGHT", keywordsSection, "BOTTOMRIGHT", 0, -SECTION_GAP)
 
-    local outputsHelper = f:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    outputsHelper:SetPoint("TOPLEFT", outputsLabel, "BOTTOMLEFT", 0, -LABEL_GAP)
-    outputsHelper:SetPoint("RIGHT", f, "RIGHT", -PAD, 0)
+    local outputsHelper = outputsSection.body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    outputsHelper:SetPoint("TOPLEFT", outputsSection.body, "TOPLEFT", 0, 0)
+    outputsHelper:SetPoint("RIGHT", outputsSection.body, "RIGHT", 0, 0)
     outputsHelper:SetJustifyH("LEFT")
     outputsHelper:SetWordWrap(true)
     outputsHelper:SetText("Pick which chat tabs receive keyword matches. If none are selected, the default chat frame is used.")
 
-    local outputContainer = CreateFrame("Frame", nil, f)
+    local outputContainer = CreateFrame("Frame", nil, outputsSection.body)
     outputContainer:SetPoint("TOPLEFT", outputsHelper, "BOTTOMLEFT", 0, -HELPER_GAP)
-    outputContainer:SetPoint("RIGHT", f, "RIGHT", -PAD, 0)
+    outputContainer:SetPoint("RIGHT", outputsSection.body, "RIGHT", 0, 0)
     outputContainer:SetHeight(20)
 
-    local optionsLabel = f:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    optionsLabel:SetPoint("TOPLEFT", outputContainer, "BOTTOMLEFT", 0, -SECTION_GAP)
-    optionsLabel:SetText("Options")
+    -- Options section
+    local optionsSection = buildSection(f, "Options")
+    optionsSection:SetPoint("TOPLEFT", outputsSection, "BOTTOMLEFT", 0, -SECTION_GAP)
+    optionsSection:SetPoint("TOPRIGHT", outputsSection, "BOTTOMRIGHT", 0, -SECTION_GAP)
 
-    local soundCheck = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
+    local soundCheck = CreateFrame("CheckButton", nil, optionsSection.body, "UICheckButtonTemplate")
     soundCheck:SetSize(20, 20)
-    soundCheck:SetPoint("TOPLEFT", optionsLabel, "BOTTOMLEFT", 0, -LABEL_GAP)
+    soundCheck:SetPoint("TOPLEFT", optionsSection.body, "TOPLEFT", 0, 0)
     if soundCheck.Text then
         soundCheck.Text:SetText("Play sound on match")
         soundCheck.Text:SetFontObject(GameFontHighlightSmall)
@@ -552,16 +622,18 @@ local function buildPanel()
         activeOptions.playSound = checked
     end)
     f.soundCheck = soundCheck
+    optionsSection:SetHeight(20 + SECTION_INNER_PAD * 2)
 
+    -- Footer buttons
     local closeBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
     closeBtn:SetSize(80, BTN_H)
-    closeBtn:SetPoint("BOTTOMLEFT", PAD, PAD)
+    closeBtn:SetPoint("BOTTOMLEFT", PANEL_PAD, PANEL_PAD_BOTTOM)
     closeBtn:SetText("Close")
     closeBtn:SetScript("OnClick", function() f:Hide() end)
 
     local startBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
     startBtn:SetSize(100, BTN_H)
-    startBtn:SetPoint("BOTTOMRIGHT", -PAD, PAD)
+    startBtn:SetPoint("BOTTOMRIGHT", -PANEL_PAD, PANEL_PAD_BOTTOM)
     local startTex = startBtn:GetNormalTexture()
     local startHi = startBtn:GetHighlightTexture()
 
@@ -603,17 +675,39 @@ local function buildPanel()
         notify("Settings saved.")
     end)
 
+    -- Recomputes per-section heights and the overall panel height from current
+    -- helper-text wrap and dynamic list/row heights. Called on show and any
+    -- time keyword rows or channel lists change.
+    local function resizePanel()
+        local channelsHelperH = math.max(channelsHelper:GetStringHeight(), 16)
+        local channelsListH = channelContainer:GetHeight()
+        channelsSection:SetHeight(channelsHelperH + HELPER_GAP + channelsListH + SECTION_INNER_PAD * 2)
+
+        local keywordsHelperH = math.max(keywordsHelper:GetStringHeight(), 28)
+        local keywordsRowsH = keywordsContainer:GetHeight()
+        keywordsSection:SetHeight(keywordsHelperH + HELPER_GAP + keywordsRowsH + HELPER_GAP + BTN_H + SECTION_INNER_PAD * 2)
+
+        local outputsHelperH = math.max(outputsHelper:GetStringHeight(), 28)
+        local outputsListH = outputContainer:GetHeight()
+        outputsSection:SetHeight(outputsHelperH + HELPER_GAP + outputsListH + SECTION_INNER_PAD * 2)
+
+        local sectionsH = channelsSection:GetHeight() + SECTION_GAP +
+                          keywordsSection:GetHeight() + SECTION_GAP +
+                          outputsSection:GetHeight() + SECTION_GAP +
+                          optionsSection:GetHeight()
+        local footerH = SECTION_GAP + BTN_H + PANEL_PAD_BOTTOM
+        f:SetHeight(PANEL_PAD_TOP + sectionsH + footerH)
+    end
+    f.resizePanel = resizePanel
+
     f:SetScript("OnShow", function()
         local store = loadStore()
-        local last, channelsHeight = rebuildChannels(channelContainer, channelsHelper, store, HELPER_GAP)
-        channelContainer:SetHeight(math.max(channelsHeight, 16))
-        keywordsLabel:ClearAllPoints()
-        keywordsLabel:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, -SECTION_GAP)
 
-        f.lastRowsHeight = nil
+        local _, channelsHeight = rebuildChannels(channelContainer, channelsHelper, store, HELPER_GAP)
+        channelContainer:SetHeight(math.max(channelsHeight, 16))
+
         populateRows(store)
-        local rowsHeight = layoutKeywordRows()
-        f.lastRowsHeight = rowsHeight
+        layoutKeywordRows()
         C_Timer.After(0, function()
             local first = keywordRowsActive[1]
             if f:IsShown() and first then first.editBox:SetFocus() end
@@ -624,19 +718,7 @@ local function buildPanel()
 
         soundCheck:SetChecked(store.playSound ~= false)
         refreshStartBtn()
-
-        local LABEL_H = 16
-        local OPTIONS_H = 20
-        local keywordsHelperH = math.max(keywordsHelper:GetStringHeight(), 28)
-        local channelsHelperH = math.max(channelsHelper:GetStringHeight(), 16)
-        local outputsHelperH = math.max(outputsHelper:GetStringHeight(), 28)
-        local headerH = PAD + TITLE_TO_LABEL
-        local channelsBlock = LABEL_H + LABEL_GAP + channelsHelperH + channelsHeight
-        local keywordsBlock = LABEL_H + LABEL_GAP + keywordsHelperH + HELPER_GAP + rowsHeight + HELPER_GAP + BTN_H
-        local outputsBlock = LABEL_H + LABEL_GAP + outputsHelperH + outHeight
-        local optionsBlock = LABEL_H + LABEL_GAP + OPTIONS_H
-        local footerBlock = SECTION_GAP + BTN_H + PAD
-        f:SetHeight(headerH + channelsBlock + SECTION_GAP + keywordsBlock + SECTION_GAP + outputsBlock + SECTION_GAP + optionsBlock + footerBlock)
+        resizePanel()
     end)
 
     tinsert(UISpecialFrames, "ChatScanPanel")
