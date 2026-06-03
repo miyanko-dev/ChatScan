@@ -11,6 +11,17 @@ local DEDUP_MAX = 20
 local DEFAULT_SOUND_ID = 3175  -- SOUNDKIT.MAP_PING (minimap ping)
 local SOUND_THROTTLE = 3.0
 
+-- Friendly named alerts for the sound picker, so users never type a raw ID.
+local SOUND_PRESETS = {
+    { name = "Minimap Ping",   id = SOUNDKIT.MAP_PING },
+    { name = "Whisper",        id = SOUNDKIT.TELL_MESSAGE },
+    { name = "Raid Warning",   id = SOUNDKIT.RAID_WARNING },
+    { name = "Ready Check",    id = SOUNDKIT.READY_CHECK },
+    { name = "Auction Window", id = SOUNDKIT.AUCTION_WINDOW_OPEN },
+    { name = "Alarm Clock",    id = SOUNDKIT.ALARM_CLOCK_WARNING_1 },
+    { name = "Murloc",         id = SOUNDKIT.MURLOC_AGGRO },
+}
+
 -- Layout spacing. All numeric padding/sizing uses the 4/8/16/24/32 increment
 -- system; exceptions are dimensions dictated by Blizzard art (header banner /
 -- label lift) and the 20px native CheckButton size.
@@ -45,9 +56,15 @@ local activeOutputs = {}
 local activeOptions = { playSound = true, soundId = DEFAULT_SOUND_ID }
 local recentMatches = {}
 local lastSoundTime = 0
+local matchCount = 0
+local lastMatchSender, lastMatchStamp
 
 local function notify(msg)
     DEFAULT_CHAT_FRAME:AddMessage(PREFIX .. msg)
+end
+
+local function matchLabel(count)
+    return string.format("%d match%s", count, count == 1 and "" or "es")
 end
 
 local function playerKey()
@@ -144,9 +161,13 @@ local function isDuplicate(sender, msg)
     return false
 end
 
-local function showMatch(msg, sender)
+local function showMatch(msg, sender, channelName)
     local rendered = renderIcons(msg)
-    local line = "|Hplayer:" .. sender .. "|h|cffffff00[" .. sender .. "]:|r|h " .. rendered
+    local prefix = "|cff7f7f7f[" .. date("%H:%M") .. "]|r"
+    if channelName and channelName ~= "" then
+        prefix = prefix .. " |cff40c0ff[" .. channelName .. "]|r"
+    end
+    local line = prefix .. " |Hplayer:" .. sender .. "|h|cffffff00[" .. sender .. "]:|r|h " .. rendered
 
     local delivered = false
     for i = 1, NUM_CHAT_WINDOWS or 10 do
@@ -156,6 +177,10 @@ local function showMatch(msg, sender)
                 local frame = _G["ChatFrame" .. i]
                 if frame then
                     frame:AddMessage(line)
+                    -- Flash the tab so matches in a background tab aren't missed.
+                    if frame ~= SELECTED_CHAT_FRAME then
+                        FCF_StartAlertFlash(frame)
+                    end
                     delivered = true
                 end
             end
@@ -164,6 +189,12 @@ local function showMatch(msg, sender)
     if not delivered then
         DEFAULT_CHAT_FRAME:AddMessage(line)
     end
+
+    matchCount = matchCount + 1
+    lastMatchSender = sender
+    lastMatchStamp = date("%H:%M")
+    if panel and panel.updateStatus then panel.updateStatus() end
+
     if activeOptions.playSound then
         local now = GetTime()
         if now - lastSoundTime >= SOUND_THROTTLE then
@@ -181,7 +212,7 @@ scanFrame:SetScript("OnEvent", function(_, event, ...)
     if not nameKey or not activeChannels[nameKey] then return end
     if not matchesKeywords(msg) then return end
     if isDuplicate(sender, msg) then return end
-    showMatch(msg, sender or UNKNOWN or "?")
+    showMatch(msg, sender or UNKNOWN or "?", channelName)
 end)
 
 local function loadRuntime(store)
@@ -204,6 +235,11 @@ local function countTrue(t)
     return n
 end
 
+local function notifyScanning()
+    notify(string.format("Scanning %d channel(s) for %d keyword group(s).",
+        countTrue(activeChannels), #parsedGroups))
+end
+
 local function startScan()
     local store = loadStore()
     loadRuntime(store)
@@ -222,8 +258,8 @@ local function startScan()
     end
     scanning = true
     store.scanEnabled = true
-    notify(string.format("Scanning %d channel(s) for %d keyword group(s).",
-        countTrue(activeChannels), #parsedGroups))
+    matchCount = 0
+    notifyScanning()
     return true
 end
 
@@ -247,6 +283,19 @@ local function clearChildren(list)
     wipe(list)
 end
 
+-- UICheckButtonTemplate exposes a .Text region on most clients but not all;
+-- fall back to a manual label so both cases render identically.
+local function setCheckboxLabel(checkButton, text)
+    if checkButton.Text then
+        checkButton.Text:SetText(text)
+        checkButton.Text:SetFontObject(GameFontHighlightSmall)
+    else
+        local label = checkButton:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        label:SetPoint("LEFT", checkButton, "RIGHT", 2, 0)
+        label:SetText(text)
+    end
+end
+
 -- Render a list of CheckButtons inside `container`, anchored to the container
 -- itself (no double-counted top gap). Returns the rendered height so the caller
 -- can size the container exactly to the last row's bottom.
@@ -268,14 +317,7 @@ local function renderCheckList(container, entries, isChecked, onClick, emptyText
         else
             cb:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -ROW_GAP)
         end
-        if cb.Text then
-            cb.Text:SetText(entry.name)
-            cb.Text:SetFontObject(GameFontHighlightSmall)
-        else
-            local fs = cb:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-            fs:SetPoint("LEFT", cb, "RIGHT", 2, 0)
-            fs:SetText(entry.name)
-        end
+        setCheckboxLabel(cb, entry.name)
         cb:SetChecked(isChecked(entry))
         cb:SetScript("OnClick", function(self) onClick(entry, self:GetChecked()) end)
         tracker[#tracker + 1] = cb
@@ -292,11 +334,10 @@ local function rebuildChannels(container, store)
     local list = { GetChannelList() }
     local entries = {}
     for i = 1, #list, 3 do
-        local id, name = list[i], list[i + 1]
+        local name = list[i + 1]
         if name and name ~= "" then
             entries[#entries + 1] = {
-                id = id, name = name,
-                key = strlower(name), bucket = channelCheckboxes,
+                name = name, key = strlower(name), bucket = channelCheckboxes,
             }
         end
     end
@@ -314,8 +355,7 @@ local function buildOutputs(container, store)
             local name = GetChatWindowInfo and GetChatWindowInfo(i)
             if name and name ~= "" then
                 entries[#entries + 1] = {
-                    index = i, name = name,
-                    key = strlower(name), bucket = outputCheckboxes,
+                    name = name, key = strlower(name), bucket = outputCheckboxes,
                 }
             end
         end
@@ -500,11 +540,7 @@ local function populateRows(store)
     ensureTrailingEmptyRow()
 end
 
--- Panel chrome (layout constants are defined at the top of the file).
-
--- Native Blizzard dialog-frame backdrop (matches AceGUI Frame, which is what
--- Questie's options panel uses). DialogBox-Border has the metallic look with
--- decorative corners; DialogBox-Background is the standard tan parchment.
+-- Native Blizzard dialog backdrop (same art AceGUI's Frame / Questie's options use).
 local function applyPanelBackdrop(frame)
     frame:SetBackdrop({
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
@@ -516,10 +552,8 @@ local function applyPanelBackdrop(frame)
     })
 end
 
--- Native Blizzard dialog-box header banner (Interface\DialogFrame\UI-DialogBox-Header)
--- composed as three texture pieces (left cap, repeating middle, right cap),
--- centered at the parent's top edge and overlapping into the frame interior.
--- Same texture coords AceGUI uses for its Frame title.
+-- Blizzard dialog-box header banner from three pieces (left cap, middle, right cap);
+-- texcoords match AceGUI's Frame title.
 local function buildTitleHeader(parent, text)
     local HEADER_TEXTURE = "Interface\\DialogFrame\\UI-DialogBox-Header"
 
@@ -660,23 +694,11 @@ local function buildPanel()
     optionsHelper:SetText("This sound plays whenever a keyword match is found.")
     optionsSection.helper = optionsHelper
 
-    local useDefaultBtn = CreateFrame("Button", nil, optionsSection.body, "UIPanelButtonTemplate")
-    useDefaultBtn:SetSize(144, ROW_H)
-    useDefaultBtn:SetPoint("TOPRIGHT", optionsHelper, "BOTTOMRIGHT", 0, -HELPER_GAP)
-    useDefaultBtn:SetText("Use Default Sound ID")
-
-    -- Checkbox sits on the same row as the button, top-aligned with it.
+    -- Checkbox on the first row; the sound picker + Test sit on the row below.
     local soundCheck = CreateFrame("CheckButton", nil, optionsSection.body, "UICheckButtonTemplate")
     soundCheck:SetSize(CB_H, CB_H)
     soundCheck:SetPoint("TOPLEFT", optionsHelper, "BOTTOMLEFT", 0, -HELPER_GAP)
-    if soundCheck.Text then
-        soundCheck.Text:SetText("Play sound on match")
-        soundCheck.Text:SetFontObject(GameFontHighlightSmall)
-    else
-        local fs = soundCheck:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        fs:SetPoint("LEFT", soundCheck, "RIGHT", 2, 0)
-        fs:SetText("Play sound on match")
-    end
+    setCheckboxLabel(soundCheck, "Play sound on match")
     soundCheck:SetScript("OnClick", function(self)
         local store = loadStore()
         local checked = self:GetChecked() and true or false
@@ -685,50 +707,33 @@ local function buildPanel()
     end)
     f.soundCheck = soundCheck
 
-    -- InputBoxTemplate's Left/Right textures extend 8px past the EditBox edges;
-    -- inset the EditBox by 8 on each side so the visible width matches the button.
-    local soundIdInput = CreateFrame("EditBox", nil, optionsSection.body, "InputBoxTemplate")
-    soundIdInput:SetHeight(CB_H)
-    soundIdInput:SetPoint("TOPLEFT", useDefaultBtn, "BOTTOMLEFT", 8, -ROW_GAP)
-    soundIdInput:SetPoint("TOPRIGHT", useDefaultBtn, "BOTTOMRIGHT", -8, -ROW_GAP)
-    soundIdInput:SetAutoFocus(false)
-    soundIdInput:SetNumeric(true)
-    soundIdInput:SetMaxLetters(8)
-    soundIdInput:SetJustifyH("CENTER")
-    f.soundIdInput = soundIdInput
-
-    local function applySoundId(value)
-        local store = loadStore()
-        local n = tonumber(value)
-        if n and n > 0 then
-            store.soundId = n
-            activeOptions.soundId = n
+    -- Named-sound picker. Choosing a sound saves it and plays it once as a preview.
+    local soundDropdown = CreateFrame("DropdownButton", nil, optionsSection.body, "WowStyle1DropdownTemplate")
+    soundDropdown:SetSize(160, ROW_H)
+    soundDropdown:SetPoint("TOPLEFT", soundCheck, "BOTTOMLEFT", 0, -ROW_GAP)
+    soundDropdown:SetDefaultText("Choose a sound")
+    soundDropdown:SetupMenu(function(_, root)
+        for _, preset in ipairs(SOUND_PRESETS) do
+            root:CreateRadio(preset.name,
+                function() return activeOptions.soundId == preset.id end,
+                function()
+                    local store = loadStore()
+                    store.soundId = preset.id
+                    activeOptions.soundId = preset.id
+                    PlaySound(preset.id, "Master", true)
+                end)
         end
-        soundIdInput:SetText(tostring(store.soundId))
-        soundIdInput:SetCursorPosition(0)
-    end
+    end)
+    f.soundDropdown = soundDropdown
 
-    soundIdInput:SetScript("OnEnterPressed", function(self)
-        applySoundId(self:GetText())
-        self:ClearFocus()
+    -- Replays the selected sound so it can be previewed at any time.
+    local testBtn = CreateFrame("Button", nil, optionsSection.body, "UIPanelButtonTemplate")
+    testBtn:SetSize(60, ROW_H)
+    testBtn:SetPoint("LEFT", soundDropdown, "RIGHT", ROW_GAP, 0)
+    testBtn:SetText("Test")
+    testBtn:SetScript("OnClick", function()
+        PlaySound(activeOptions.soundId or DEFAULT_SOUND_ID, "Master", true)
     end)
-    soundIdInput:SetScript("OnEscapePressed", function(self)
-        local store = loadStore()
-        self:SetText(tostring(store.soundId))
-        self:ClearFocus()
-    end)
-    soundIdInput:SetScript("OnEditFocusLost", function(self)
-        applySoundId(self:GetText())
-    end)
-
-    useDefaultBtn:SetScript("OnClick", function()
-        local store = loadStore()
-        store.soundId = DEFAULT_SOUND_ID
-        activeOptions.soundId = DEFAULT_SOUND_ID
-        soundIdInput:SetText(tostring(DEFAULT_SOUND_ID))
-        soundIdInput:SetCursorPosition(0)
-    end)
-
 
     -- Footer (Close on the left, Start/Stop on the right)
     local closeBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
@@ -753,6 +758,7 @@ local function buildPanel()
             if startTex then startTex:SetVertexColor(1, 1, 1) end
             if startHi then startHi:SetVertexColor(1, 1, 1) end
         end
+        if f.updateStatus then f.updateStatus() end
     end
     f.refreshStartBtn = refreshStartBtn
     refreshStartBtn()
@@ -765,6 +771,23 @@ local function buildPanel()
         end
         if startScan() then refreshStartBtn() end
     end)
+
+    -- Live feedback shown between the footer buttons: scan state + match count.
+    local statusText = f:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    statusText:SetPoint("LEFT", closeBtn, "RIGHT", 8, 0)
+    statusText:SetPoint("RIGHT", startBtn, "LEFT", -8, 0)
+    statusText:SetJustifyH("CENTER")
+
+    local function updateStatus()
+        if scanning then
+            statusText:SetText("|cff40ff40Scanning|r  •  " .. matchLabel(matchCount))
+        elseif matchCount > 0 then
+            statusText:SetText("|cff999999Stopped|r  •  " .. matchLabel(matchCount) .. " this session")
+        else
+            statusText:SetText("|cff999999Not scanning|r")
+        end
+    end
+    f.updateStatus = updateStatus
 
     -- Section height = helper text + HELPER_GAP + content height + body insets.
     -- Content containers no longer carry an internal "top gap", so the body's
@@ -789,21 +812,46 @@ local function buildPanel()
     end
     f.resizePanel = resizePanel
 
+    local function refreshChannelList()
+        local store = loadStore()
+        local channelsH = rebuildChannels(channelContainer, store)
+        channelContainer:SetHeight(math.max(channelsH, CB_H))
+    end
+
     f:SetScript("OnShow", function()
         local store = loadStore()
 
-        local channelsH = rebuildChannels(channelContainer, store)
-        channelContainer:SetHeight(math.max(channelsH, CB_H))
+        -- Keep runtime values in sync so the picker and Test button reflect the
+        -- saved sound even when a scan hasn't been started yet.
+        activeOptions.playSound = store.playSound ~= false
+        activeOptions.soundId = store.soundId or DEFAULT_SOUND_ID
 
+        refreshChannelList()
         populateRows(store)
 
         local outH = buildOutputs(outputContainer, store)
         outputContainer:SetHeight(math.max(outH, CB_H))
 
         soundCheck:SetChecked(store.playSound ~= false)
-        soundIdInput:SetText(tostring(store.soundId))
-        soundIdInput:SetCursorPosition(0)
+        soundDropdown:GenerateMenu()
+
+        -- Refresh the channel list live as the player joins or leaves channels.
+        f:RegisterEvent("CHANNEL_UI_UPDATE")
+        f:RegisterEvent("CHAT_MSG_CHANNEL_NOTICE")
+
         refreshStartBtn()
+        updateStatus()
+        resizePanel()
+    end)
+
+    f:SetScript("OnHide", function()
+        f:UnregisterEvent("CHANNEL_UI_UPDATE")
+        f:UnregisterEvent("CHAT_MSG_CHANNEL_NOTICE")
+    end)
+
+    f:SetScript("OnEvent", function(self)
+        if not self:IsShown() then return end
+        refreshChannelList()
         resizePanel()
     end)
 
@@ -834,7 +882,10 @@ local function setupMinimapButton()
         OnTooltipShow = function(tt)
             tt:AddLine(ADDON_NAME)
             if scanning then
-                tt:AddLine("|cff00ff00Scanning active.|r", 1, 1, 1)
+                tt:AddLine("|cff00ff00Scanning|r — " .. matchLabel(matchCount) .. " this session.", 1, 1, 1)
+                if lastMatchSender then
+                    tt:AddLine(string.format("Last: %s at %s", lastMatchSender, lastMatchStamp or "?"), 1, 1, 1)
+                end
             end
             tt:AddLine("|cffffd200Left-click|r to toggle the panel.", 1, 1, 1)
             tt:AddLine("|cffffd200/cs <KEYWORD>|r adds a keyword and starts scanning.", 1, 1, 1)
@@ -935,8 +986,7 @@ loader:SetScript("OnEvent", function(_, event, arg1)
                 scanFrame:RegisterEvent("CHAT_MSG_CHANNEL")
             end
             scanning = true
-            notify(string.format("Scanning %d channel(s) for %d keyword group(s).",
-                countTrue(activeChannels), #parsedGroups))
+            notifyScanning()
         else
             store.scanEnabled = false
         end
