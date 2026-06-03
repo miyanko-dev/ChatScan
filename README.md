@@ -4,7 +4,7 @@ Keyword scanner for chat channels, with a native config panel and a minimap butt
 
 ## How it works
 
-ChatScan watches the chat channels you pick and forwards any message that matches your keyword rules to the chat tabs you pick. Matches are deduplicated for 10 seconds so the same line doesn't repeat, and an optional alert sound plays on a match (throttled to once every 3 seconds).
+ChatScan watches the chat channels you pick and forwards any message that matches your keyword rules to the chat tabs you pick. Each forwarded line is stamped with the time and the channel it came from, and the receiving tab flashes if it isn't the one you're looking at. Matches are deduplicated for 10 seconds so the same line doesn't repeat, and an optional alert sound plays on a match (throttled to once every 3 seconds).
 
 Settings, scan state, and the minimap button position are saved per character; an active scan resumes after `/reload` or login.
 
@@ -13,8 +13,10 @@ Settings, scan state, and the minimap button position are saved per character; a
 | Command | Description |
 |---|---|
 | `/cs` | Toggle the scan panel |
+| `/cs <keyword>` | Add a keyword (or `word1,word2` for an AND group) and start scanning |
 | `/cs start` | Start scanning with saved settings |
 | `/cs stop` | Stop the active scan |
+| `/cs clear` | Empty the keyword list |
 
 `/chatscan` is accepted as an alias.
 
@@ -22,12 +24,12 @@ Settings, scan state, and the minimap button position are saved per character; a
 
 The panel has four sections:
 
-- **Channels** — checkboxes for every chat channel you are currently in. Pick which ones to scan.
-- **Keywords** — one or more rows of keyword groups. Each row matches independently (**OR**). Inside a row, separate keywords with commas to require all of them (**AND**). Matching is case-insensitive and uses plain text — no Lua patterns.
-- **Channel Match Display** — which chat tabs receive the matches. If none are picked, matches go to the default chat frame.
-- **Options** — toggle the alert sound on or off.
+- **Scanned Channels** — checkboxes for every chat channel you are currently in. Pick which ones to scan. The list updates by itself as you join or leave channels.
+- **Keywords** — one or more rows of keyword groups. Each row matches independently (**OR**). Inside a row, separate keywords with commas to require all of them (**AND**). Matching is case-insensitive and uses plain text — no Lua patterns. Type in the trailing empty row and press **Add** (or Enter) to save a rule; press the **X** to remove one.
+- **Channel Output** — which chat tabs receive the matches. If none are picked, matches go to the default chat frame.
+- **Sound Options** — turn the alert sound on or off, pick a named sound from the list (choosing one previews it), and use **Test** to hear it again.
 
-**Save** stores your keywords without starting a scan. **Start** saves and starts scanning; while a scan is active the button turns red and reads **Stop**.
+Keywords save automatically as you add or remove them. **Start** begins scanning; while a scan is active the button turns red and reads **Stop**, and the line between the footer buttons shows the live match count.
 
 Examples:
 - Row `wts thunderfury` → matches any message containing `wts thunderfury`.
