@@ -22,9 +22,7 @@ local SOUND_PRESETS = {
     { name = "Murloc",         id = SOUNDKIT.MURLOC_AGGRO },
 }
 
--- Layout spacing. All numeric padding/sizing uses the 4/8/16/24/32 increment
--- system; exceptions are dimensions dictated by Blizzard art (header banner /
--- label lift) and the 20px native CheckButton size.
+-- Layout spacing. All numeric padding/sizing uses the 4/8/16/24/32 increment system; exceptions are dimensions dictated by Blizzard art (header banner / label lift) and the 20px native CheckButton size.
 local PAD = 16                  -- outer panel padding (sides + bottom)
 local PAD_TOP = 48              -- clears the dialog-box-header banner
 local SECTION_GAP = 24          -- vertical space between two section boxes
@@ -283,8 +281,7 @@ local function clearChildren(list)
     wipe(list)
 end
 
--- UICheckButtonTemplate exposes a .Text region on most clients but not all;
--- fall back to a manual label so both cases render identically.
+-- UICheckButtonTemplate exposes a .Text region on most clients but not all; fall back to a manual label so both cases render identically.
 local function setCheckboxLabel(checkButton, text)
     if checkButton.Text then
         checkButton.Text:SetText(text)
@@ -296,9 +293,7 @@ local function setCheckboxLabel(checkButton, text)
     end
 end
 
--- Render a list of CheckButtons inside `container`, anchored to the container
--- itself (no double-counted top gap). Returns the rendered height so the caller
--- can size the container exactly to the last row's bottom.
+-- Render a list of CheckButtons inside `container`, anchored to the container itself (no double-counted top gap). Returns the rendered height so the caller can size the container exactly to the last row's bottom.
 local function renderCheckList(container, entries, isChecked, onClick, emptyText, tracker)
     clearChildren(tracker)
     if #entries == 0 then
@@ -366,13 +361,7 @@ local function buildOutputs(container, store)
         "(no chat tabs available)", outputListChildren)
 end
 
--- Per-row UX mirrors TargetFinder's slot rows. A row holds one keyword group.
--- States:
---   * empty (no saved keyword, input blank)   -> no button shown
---   * pending (input differs from saved text) -> "Add" button
---   * saved   (input matches saved text)      -> remove (X) button
--- The trailing row is always empty so users can add a new keyword without
--- pressing an extra "new row" button.
+-- Per-row UX mirrors TargetFinder's slot rows. A row holds one keyword group. States: * empty (no saved keyword, input blank) -> no button shown * pending (input differs from saved text) -> "Add" button * saved (input matches saved text) -> remove (X) button The trailing row is always empty so users can add a new keyword without pressing an extra "new row" button.
 local commitKeywordRow, deleteKeywordRow, ensureTrailingEmptyRow
 
 local function persistKeywords()
@@ -552,8 +541,7 @@ local function applyPanelBackdrop(frame)
     })
 end
 
--- Blizzard dialog-box header banner from three pieces (left cap, middle, right cap);
--- texcoords match AceGUI's Frame title.
+-- Blizzard dialog-box header banner from three pieces (left cap, middle, right cap); texcoords match AceGUI's Frame title.
 local function buildTitleHeader(parent, text)
     local HEADER_TEXTURE = "Interface\\DialogFrame\\UI-DialogBox-Header"
 
@@ -631,11 +619,7 @@ local function buildPanel()
     local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", -2, -2)
 
-    -- Builds a section box with a wrapped helper line at the top and a content
-    -- container below it. The container is anchored at the top of the section
-    -- body; helper text sits above with HELPER_GAP between the two. Returns the
-    -- section + container; resizePanel later uses the container's height to
-    -- compute the section's total height.
+    -- Builds a section box with a wrapped helper line at the top and a content container below it. The container is anchored at the top of the section body; helper text sits above with HELPER_GAP between the two. Returns the section + container; resizePanel later uses the container's height to compute the section's total height.
     local function makeContentSection(label, helperText, prevSection)
         local section = buildSection(f, label)
         if prevSection then
@@ -789,9 +773,7 @@ local function buildPanel()
     end
     f.updateStatus = updateStatus
 
-    -- Section height = helper text + HELPER_GAP + content height + body insets.
-    -- Content containers no longer carry an internal "top gap", so the body's
-    -- bottom inset becomes the only padding below the last row.
+    -- Section height = helper text + HELPER_GAP + content height + body insets. Content containers no longer carry an internal "top gap", so the body's bottom inset becomes the only padding below the last row.
     local function sizeContentSection(section, contentH)
         local helperH = math.max(section.helper:GetStringHeight(), CB_H)
         section:SetHeight(helperH + HELPER_GAP + contentH + SECTION_INNER_PAD * 2)
@@ -804,9 +786,9 @@ local function buildPanel()
         sizeContentSection(optionsSection, ROW_H + ROW_GAP + CB_H)
 
         local sectionsH = channelsSection:GetHeight() + SECTION_GAP +
-                          keywordsSection:GetHeight() + SECTION_GAP +
-                          outputsSection:GetHeight() + SECTION_GAP +
-                          optionsSection:GetHeight()
+            keywordsSection:GetHeight() + SECTION_GAP +
+            outputsSection:GetHeight() + SECTION_GAP +
+            optionsSection:GetHeight()
         local footerH = SECTION_GAP + ROW_H + PAD
         f:SetHeight(PAD_TOP + sectionsH + footerH)
     end
@@ -821,8 +803,7 @@ local function buildPanel()
     f:SetScript("OnShow", function()
         local store = loadStore()
 
-        -- Keep runtime values in sync so the picker and Test button reflect the
-        -- saved sound even when a scan hasn't been started yet.
+        -- Keep runtime values in sync so the picker and Test button reflect the saved sound even when a scan hasn't been started yet.
         activeOptions.playSound = store.playSound ~= false
         activeOptions.soundId = store.soundId or DEFAULT_SOUND_ID
 
