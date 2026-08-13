@@ -22,15 +22,17 @@ local SOUND_PRESETS = {
     { name = "Murloc",         id = SOUNDKIT.MURLOC_AGGRO },
 }
 
--- Layout spacing. All numeric padding/sizing uses the 4/8/16/24/32 increment system; exceptions are dimensions dictated by Blizzard art (header banner / label lift) and the 20px native CheckButton size.
+-- Layout spacing. All gaps use the 4/8/16 increment system (24 = 16 + 8); exceptions are dimensions dictated by Blizzard art and the 20px native CheckButton size.
 local PAD = 16                  -- outer panel padding (sides + bottom)
 local PAD_TOP = 48              -- clears the dialog-box-header banner
-local SECTION_GAP = 24          -- vertical space between two section boxes
-local SECTION_INNER_PAD = 8     -- inset between section border and body
-local SECTION_LABEL_LIFT = 7    -- header banner overlap; visual-only
-local HELPER_GAP = 8            -- space below a section's helper text
+local SECTION_GAP = 24          -- between section boxes; clears the floating label
+local SECTION_INNER_PAD = 12    -- inset between section border and content (8 + 4); clears the border art
+local SECTION_LABEL_LIFT = 8    -- floating label bottom above the box top edge
+local HELPER_GAP = 8            -- helper text -> section content
+local BTN_GAP = 8               -- horizontal gap between sibling widgets
 local ROW_H = 24                -- height of an interactive row (input/button)
 local ROW_GAP = 4               -- vertical space between row siblings
+local ICON_BTN = 22             -- +/x icon button size, matches TargetFinder
 local CB_H = 20                 -- native UICheckButton size
 local CB_PITCH = 24             -- checkbox row pitch (CB_H + ROW_GAP)
 
@@ -281,16 +283,16 @@ local function clearChildren(list)
     wipe(list)
 end
 
--- UICheckButtonTemplate exposes a .Text region on most clients but not all; fall back to a manual label so both cases render identically.
+-- UICheckButtonTemplate exposes a .Text region on most clients but not all; fall back to a manual label so both cases render identically. The template anchors its label for the 32px default checkbox, so re-anchor with an explicit 4px gap for the 20px size (same as QuestieGuide).
 local function setCheckboxLabel(checkButton, text)
-    if checkButton.Text then
-        checkButton.Text:SetText(text)
-        checkButton.Text:SetFontObject(GameFontHighlightSmall)
-    else
-        local label = checkButton:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        label:SetPoint("LEFT", checkButton, "RIGHT", 2, 0)
-        label:SetText(text)
+    local label = checkButton.Text
+    if not label then
+        label = checkButton:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     end
+    label:SetFontObject(GameFontHighlightSmall)
+    label:SetText(text)
+    label:ClearAllPoints()
+    label:SetPoint("LEFT", checkButton, "RIGHT", 4, 0)
 end
 
 -- Render a list of CheckButtons inside `container`, anchored to the container itself (no double-counted top gap). Returns the rendered height so the caller can size the container exactly to the last row's bottom.
@@ -385,18 +387,24 @@ local function createKeywordRow(parent)
     eb:SetFontObject(ChatFontNormal)
     eb:SetMaxLetters(256)
     eb:SetHeight(ROW_H)
-    eb:SetPoint("LEFT", row, "LEFT", 8, 0)
+    -- InputBoxTemplate draws its Left border texture 5px left of the frame edge; +5 lines the visible box up with the container's left edge.
+    eb:SetPoint("LEFT", row, "LEFT", 5, 0)
     row.editBox = eb
 
-    local addBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-    addBtn:SetSize(48, ROW_H)
+    -- Plus twin of UIPanelCloseButton, texture pairing lifted from Blizzard's
+    -- own Blizzard_TableInspector.xml on the classic era branch.
+    local addBtn = CreateFrame("Button", nil, row)
+    addBtn:SetSize(ICON_BTN, ICON_BTN)
     addBtn:SetPoint("RIGHT", row, "RIGHT", 0, 0)
-    addBtn:SetText("Add")
+    addBtn:SetNormalTexture("Interface\\Buttons\\UI-Panel-BiggerButton-Up")
+    addBtn:SetPushedTexture("Interface\\Buttons\\UI-Panel-BiggerButton-Down")
+    addBtn:SetDisabledTexture("Interface\\Buttons\\UI-Panel-BiggerButton-Disabled")
+    addBtn:SetHighlightTexture("Interface\\Buttons\\UI-Panel-MinimizeButton-Highlight", "ADD")
     addBtn:Hide()
     row.addBtn = addBtn
 
     local rmBtn = CreateFrame("Button", nil, row, "UIPanelCloseButton")
-    rmBtn:SetSize(ROW_H, ROW_H)
+    rmBtn:SetSize(ICON_BTN, ICON_BTN)
     rmBtn:SetPoint("RIGHT", row, "RIGHT", 0, 0)
     rmBtn:Hide()
     row.removeBtn = rmBtn
@@ -404,7 +412,7 @@ local function createKeywordRow(parent)
     local function updateState()
         local typed = (eb:GetText() or ""):match("^%s*(.-)%s*$")
         eb:ClearAllPoints()
-        eb:SetPoint("LEFT", row, "LEFT", 8, 0)
+        eb:SetPoint("LEFT", row, "LEFT", 5, 0)
         if row.saved and row.saved ~= "" and typed == row.saved then
             addBtn:Hide()
             rmBtn:Show()
@@ -574,33 +582,6 @@ local function buildTitleHeader(parent, text)
     return mid
 end
 
--- Nested section box (matches AceGUI InlineGroup): flat dark bg + tooltip border.
-local function buildSection(parent, labelText)
-    local section = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-    section:SetBackdrop({
-        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        tile = true,
-        tileSize = 16,
-        edgeSize = 16,
-        insets = { left = 3, right = 3, top = 5, bottom = 3 },
-    })
-    section:SetBackdropColor(0.1, 0.1, 0.1, 0.5)
-    section:SetBackdropBorderColor(0.4, 0.4, 0.4)
-
-    local label = section:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    label:SetPoint("BOTTOMLEFT", section, "TOPLEFT", 12, SECTION_LABEL_LIFT)
-    label:SetText(labelText)
-    section.label = label
-
-    local body = CreateFrame("Frame", nil, section)
-    body:SetPoint("TOPLEFT", section, "TOPLEFT", SECTION_INNER_PAD, -SECTION_INNER_PAD)
-    body:SetPoint("BOTTOMRIGHT", section, "BOTTOMRIGHT", -SECTION_INNER_PAD, SECTION_INNER_PAD)
-    section.body = body
-
-    return section
-end
-
 local function buildPanel()
     local f = CreateFrame("Frame", "ChatScanPanel", UIParent, "BackdropTemplate")
     f:SetSize(380, 1)
@@ -617,11 +598,21 @@ local function buildPanel()
     buildTitleHeader(f, "Chat Scan")
 
     local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", -2, -2)
+    close:SetPoint("TOPRIGHT", -4, -4)
 
-    -- Builds a section box with a wrapped helper line at the top and a content container below it. The container is anchored at the top of the section body; helper text sits above with HELPER_GAP between the two. Returns the section + container; resizePanel later uses the container's height to compute the section's total height.
+    -- Boxed subcontainer (AceGUI InlineGroup look): dark bg + tooltip border with a floating yellow label above the box, grey wrapped helper at the content top, content container 8px below the helper. resizePanel sizes the section from the measured helper height plus the container height.
     local function makeContentSection(label, helperText, prevSection)
-        local section = buildSection(f, label)
+        local section = CreateFrame("Frame", nil, f, "BackdropTemplate")
+        section:SetBackdrop({
+            bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile = true,
+            tileSize = 16,
+            edgeSize = 16,
+            insets = { left = 3, right = 3, top = 5, bottom = 3 },
+        })
+        section:SetBackdropColor(0.1, 0.1, 0.1, 0.5)
+        section:SetBackdropBorderColor(0.4, 0.4, 0.4)
         if prevSection then
             section:SetPoint("TOPLEFT", prevSection, "BOTTOMLEFT", 0, -SECTION_GAP)
             section:SetPoint("TOPRIGHT", prevSection, "BOTTOMRIGHT", 0, -SECTION_GAP)
@@ -630,16 +621,20 @@ local function buildPanel()
             section:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD, -PAD_TOP)
         end
 
-        local helper = section.body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        helper:SetPoint("TOPLEFT", section.body, "TOPLEFT", 0, 0)
-        helper:SetPoint("RIGHT", section.body, "RIGHT", 0, 0)
+        local header = section:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        header:SetPoint("BOTTOMLEFT", section, "TOPLEFT", SECTION_INNER_PAD, SECTION_LABEL_LIFT)
+        header:SetText(label)
+
+        local helper = section:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+        helper:SetPoint("TOPLEFT", section, "TOPLEFT", SECTION_INNER_PAD, -SECTION_INNER_PAD)
+        helper:SetPoint("RIGHT", section, "RIGHT", -SECTION_INNER_PAD, 0)
         helper:SetJustifyH("LEFT")
         helper:SetWordWrap(true)
         helper:SetText(helperText)
 
-        local container = CreateFrame("Frame", nil, section.body)
+        local container = CreateFrame("Frame", nil, section)
         container:SetPoint("TOPLEFT", helper, "BOTTOMLEFT", 0, -HELPER_GAP)
-        container:SetPoint("RIGHT", section.body, "RIGHT", 0, 0)
+        container:SetPoint("RIGHT", section, "RIGHT", -SECTION_INNER_PAD, 0)
         container:SetHeight(CB_H)
 
         section.helper = helper
@@ -666,22 +661,15 @@ local function buildPanel()
         keywordsSection)
 
     -- Sound Options
-    local optionsSection = buildSection(f, "Sound Options")
-    optionsSection:SetPoint("TOPLEFT", outputsSection, "BOTTOMLEFT", 0, -SECTION_GAP)
-    optionsSection:SetPoint("TOPRIGHT", outputsSection, "BOTTOMRIGHT", 0, -SECTION_GAP)
-
-    local optionsHelper = optionsSection.body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    optionsHelper:SetPoint("TOPLEFT", optionsSection.body, "TOPLEFT", 0, 0)
-    optionsHelper:SetPoint("RIGHT", optionsSection.body, "RIGHT", 0, 0)
-    optionsHelper:SetJustifyH("LEFT")
-    optionsHelper:SetWordWrap(true)
-    optionsHelper:SetText("This sound plays whenever a keyword match is found.")
-    optionsSection.helper = optionsHelper
+    local optionsSection, optionsContainer = makeContentSection(
+        "Sound Options",
+        "This sound plays whenever a keyword match is found.",
+        outputsSection)
 
     -- Checkbox on the first row; the sound picker + Test sit on the row below.
-    local soundCheck = CreateFrame("CheckButton", nil, optionsSection.body, "UICheckButtonTemplate")
+    local soundCheck = CreateFrame("CheckButton", nil, optionsContainer, "UICheckButtonTemplate")
     soundCheck:SetSize(CB_H, CB_H)
-    soundCheck:SetPoint("TOPLEFT", optionsHelper, "BOTTOMLEFT", 0, -HELPER_GAP)
+    soundCheck:SetPoint("TOPLEFT", optionsContainer, "TOPLEFT", 0, 0)
     setCheckboxLabel(soundCheck, "Play sound on match")
     soundCheck:SetScript("OnClick", function(self)
         local store = loadStore()
@@ -692,7 +680,7 @@ local function buildPanel()
     f.soundCheck = soundCheck
 
     -- Named-sound picker. Choosing a sound saves it and plays it once as a preview.
-    local soundDropdown = CreateFrame("DropdownButton", nil, optionsSection.body, "WowStyle1DropdownTemplate")
+    local soundDropdown = CreateFrame("DropdownButton", nil, optionsContainer, "WowStyle2DropdownTemplate")
     soundDropdown:SetSize(160, ROW_H)
     soundDropdown:SetPoint("TOPLEFT", soundCheck, "BOTTOMLEFT", 0, -ROW_GAP)
     soundDropdown:SetDefaultText("Choose a sound")
@@ -711,21 +699,15 @@ local function buildPanel()
     f.soundDropdown = soundDropdown
 
     -- Replays the selected sound so it can be previewed at any time.
-    local testBtn = CreateFrame("Button", nil, optionsSection.body, "UIPanelButtonTemplate")
+    local testBtn = CreateFrame("Button", nil, optionsContainer, "UIPanelButtonTemplate")
     testBtn:SetSize(60, ROW_H)
-    testBtn:SetPoint("LEFT", soundDropdown, "RIGHT", ROW_GAP, 0)
+    testBtn:SetPoint("LEFT", soundDropdown, "RIGHT", BTN_GAP, 0)
     testBtn:SetText("Test")
     testBtn:SetScript("OnClick", function()
         PlaySound(activeOptions.soundId or DEFAULT_SOUND_ID, "Master", true)
     end)
 
-    -- Footer (Close on the left, Start/Stop on the right)
-    local closeBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-    closeBtn:SetSize(80, ROW_H)
-    closeBtn:SetPoint("BOTTOMLEFT", PAD, PAD)
-    closeBtn:SetText("Close")
-    closeBtn:SetScript("OnClick", function() f:Hide() end)
-
+    -- Footer (live status on the left, Start/Stop on the right). The corner X and Escape close the panel; no bottom Close button.
     local startBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
     startBtn:SetSize(96, ROW_H)
     startBtn:SetPoint("BOTTOMRIGHT", -PAD, PAD)
@@ -756,11 +738,13 @@ local function buildPanel()
         if startScan() then refreshStartBtn() end
     end)
 
-    -- Live feedback shown between the footer buttons: scan state + match count.
+    -- Live feedback shown beside the footer button: scan state + match count.
     local statusText = f:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    statusText:SetPoint("LEFT", closeBtn, "RIGHT", 8, 0)
-    statusText:SetPoint("RIGHT", startBtn, "LEFT", -8, 0)
-    statusText:SetJustifyH("CENTER")
+    statusText:SetPoint("LEFT", f, "LEFT", PAD, 0)
+    statusText:SetPoint("RIGHT", startBtn, "LEFT", -BTN_GAP, 0)
+    statusText:SetPoint("BOTTOM", startBtn, "BOTTOM", 0, 0)
+    statusText:SetHeight(ROW_H)
+    statusText:SetJustifyH("LEFT")
 
     local function updateStatus()
         if scanning then
@@ -773,17 +757,17 @@ local function buildPanel()
     end
     f.updateStatus = updateStatus
 
-    -- Section height = helper text + HELPER_GAP + content height + body insets. Content containers no longer carry an internal "top gap", so the body's bottom inset becomes the only padding below the last row.
+    -- Section height = measured helper text + helper gap + content height + border insets top and bottom.
     local function sizeContentSection(section, contentH)
-        local helperH = math.max(section.helper:GetStringHeight(), CB_H)
-        section:SetHeight(helperH + HELPER_GAP + contentH + SECTION_INNER_PAD * 2)
+        local helperH = math.ceil(section.helper:GetStringHeight())
+        section:SetHeight(SECTION_INNER_PAD * 2 + helperH + HELPER_GAP + contentH)
     end
 
     local function resizePanel()
         sizeContentSection(channelsSection, channelContainer:GetHeight())
         sizeContentSection(keywordsSection, keywordsContainer:GetHeight())
         sizeContentSection(outputsSection, outputContainer:GetHeight())
-        sizeContentSection(optionsSection, ROW_H + ROW_GAP + CB_H)
+        sizeContentSection(optionsSection, CB_H + ROW_GAP + ROW_H)
 
         local sectionsH = channelsSection:GetHeight() + SECTION_GAP +
             keywordsSection:GetHeight() + SECTION_GAP +

@@ -22,14 +22,14 @@ Settings, scan state, and the minimap button position are saved per character; a
 
 ## Panel
 
-The panel has four sections:
+The panel has four boxed sections, each a bordered group with a floating yellow label and a grey helper line (the same layout QuestieGuide and GatherMate2NodeAlert use):
 
 - **Scanned Channels** — checkboxes for every chat channel you are currently in. Pick which ones to scan. The list updates by itself as you join or leave channels.
-- **Keywords** — one or more rows of keyword groups. Each row matches independently (**OR**). Inside a row, separate keywords with commas to require all of them (**AND**). Matching is case-insensitive and uses plain text — no Lua patterns. Type in the trailing empty row and press **Add** (or Enter) to save a rule; press the **X** to remove one.
+- **Keywords** — one or more rows of keyword groups. Each row matches independently (**OR**). Inside a row, separate keywords with commas to require all of them (**AND**). Matching is case-insensitive and uses plain text — no Lua patterns. Type in the trailing empty row and press the round **+** button (or Enter) to save a rule; press the **X** to remove one.
 - **Channel Output** — which chat tabs receive the matches. If none are picked, matches go to the default chat frame.
 - **Sound Options** — turn the alert sound on or off, pick a named sound from the list (choosing one previews it), and use **Test** to hear it again.
 
-Keywords save automatically as you add or remove them. **Start** begins scanning; while a scan is active the button turns red and reads **Stop**, and the line between the footer buttons shows the live match count.
+Keywords save automatically as you add or remove them. **Start** begins scanning; while a scan is active the button turns red and reads **Stop**, and the footer line on its left shows the live match count. The corner X or Escape closes the panel.
 
 Examples:
 - Row `wts thunderfury` → matches any message containing `wts thunderfury`.
