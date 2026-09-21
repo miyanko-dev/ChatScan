@@ -1,44 +1,52 @@
 # ChatScan
 
-Keyword scanner for chat channels, with a native config panel and a minimap button, for WoW Classic 1.15.x.
+Watches the chat channels you pick and forwards any message matching your keyword rules to the chat tabs you pick.
 
-## How it works
+## Features
 
-ChatScan watches the chat channels you pick and forwards any message that matches your keyword rules to the chat tabs you pick. Each forwarded line is stamped with the time and the channel it came from, and the receiving tab flashes if it isn't the one you're looking at. Matches are deduplicated for 10 seconds so the same line doesn't repeat, and an optional alert sound plays on a match (throttled to once every 3 seconds).
+- Keyword rules with **OR** across rows and **AND** within a row, case-insensitive plain text
+- Route matches to any chat tabs you choose; the receiving tab flashes if you are not looking at it
+- Each forwarded line is stamped with its time and source channel
+- Matches deduplicated for 10 seconds, so the same line never repeats
+- Optional alert sound with preview, throttled to once every 3 seconds
+- Raid-target markers like `{star}` and `{skull}` rendered as icons
+- Minimap button (spyglass) and a full config panel
+- Settings, scan state and button position saved per character; an active scan resumes after login or `/reload`
 
-Settings, scan state, and the minimap button position are saved per character; an active scan resumes after `/reload` or login.
+## Installation
 
-## Slash commands
+1. Copy the `ChatScan/` folder into `World of Warcraft/_classic_era_/Interface/AddOns/`.
+2. Restart the game or `/reload`.
+3. Enable **ChatScan** in the AddOns list.
+
+## Usage
+
+Open the panel with `/cs` or the minimap button, then:
+
+- **Scanned Channels** — tick the channels to watch. The list updates as you join and leave channels.
+- **Keywords** — type a rule in the trailing empty row and press **+** or Enter. Commas inside a row require all of those words.
+- **Channel Output** — pick the chat tabs that receive matches. With none picked, matches go to the default chat frame.
+- **Sound Options** — turn the alert on, pick a sound, and **Test** it.
+- **Control** — **Start** begins the scan; the button turns red and the status line shows the live match count.
+
+| Rule | Matches |
+| --- | --- |
+| `wts thunderfury` | any message containing `wts thunderfury` |
+| `lf, tank` | messages containing both `lf` and `tank` |
+| `lf, tank` and `lf, heal` as two rows | `lf`+`tank` **or** `lf`+`heal` |
+
+## Commands
 
 | Command | Description |
-|---|---|
+| --- | --- |
 | `/cs` | Toggle the scan panel |
 | `/cs <keyword>` | Add a keyword (or `word1,word2` for an AND group) and start scanning |
 | `/cs start` | Start scanning with saved settings |
 | `/cs stop` | Stop the active scan |
 | `/cs clear` | Empty the keyword list |
 
-`/chatscan` is accepted as an alias.
+`/chatscan` works as an alias.
 
-## Panel
+## Requirements
 
-The panel has five boxed sections in two columns (inputs on the left, outputs on the right, Control full width below), each a bordered group with a floating yellow label and a grey helper line (the same layout QuestieGuide and GatherMate2NodeAlert use):
-
-- **Scanned Channels** — checkboxes for every chat channel you are currently in. Pick which ones to scan. The list updates by itself as you join or leave channels.
-- **Keywords** — one or more rows of keyword groups. Each row matches independently (**OR**). Inside a row, separate keywords with commas to require all of them (**AND**). Matching is case-insensitive and uses plain text — no Lua patterns. Type in the trailing empty row and press the round **+** button (or Enter) to save a rule; press the **X** to remove one.
-- **Channel Output** — which chat tabs receive the matches. If none are picked, matches go to the default chat frame.
-- **Sound Options** — turn the alert sound on or off, pick a named sound from the list (choosing one previews it), and use **Test** to hear it again.
-- **Control** — the **Start** button and the live status line.
-
-Keywords save automatically as you add or remove them. **Start** begins scanning; while a scan is active the button turns red and reads **Stop**, and the status line on its left shows the live match count. The corner X or Escape closes the panel.
-
-Examples:
-- Row `wts thunderfury` → matches any message containing `wts thunderfury`.
-- Row `lf, tank` → matches messages containing both `lf` and `tank` anywhere.
-- Two rows `lf, tank` and `lf, heal` → matches `lf`+`tank` OR `lf`+`heal`.
-
-Raid-target markers like `{star}`, `{skull}`, `{circle}` are rendered as icons in the forwarded line.
-
-## Minimap button
-
-The spyglass icon left-click toggles the panel. Drag to reposition around the minimap. Position and hide state are stored via LibDBIcon, so any addon-manager UI that supports LDB can manage the button.
+WoW Classic Era 1.15.x.
