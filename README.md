@@ -17,7 +17,7 @@ Watches the chat channels you pick and forwards any message matching your keywor
 
 1. Copy the `ChatScan/` folder into `World of Warcraft/_classic_era_/Interface/AddOns/`.
 2. Restart the game or `/reload`.
-3. Enable **ChatScan** in the AddOns list.
+3. Enable **Chat Scan** in the AddOns list.
 
 ## Usage
 

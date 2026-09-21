@@ -1,5 +1,10 @@
 local ADDON_NAME = "ChatScan"
-local PREFIX = "|cffffff00[ChatScan]:|r "
+
+-- Spaced name for everything the player reads. ADDON_NAME stays unspaced because it is the
+-- addon folder and the LibDBIcon registry key, neither of which may change.
+local ADDON_TITLE = "Chat Scan"
+
+local PREFIX = "|cffffff00[" .. ADDON_TITLE .. "]:|r "
 
 local RAID_ICONS = {
     star = 1, circle = 2, diamond = 3, triangle = 4,
@@ -865,7 +870,7 @@ local function setupMinimapButton()
 
     local dataObject = LDB:NewDataObject(ADDON_NAME, {
         type = "launcher",
-        text = ADDON_NAME,
+        text = ADDON_TITLE,
         icon = "Interface\\Icons\\INV_Misc_Spyglass_03",
         OnClick = function(_, button)
             if button == "LeftButton" then
@@ -873,7 +878,7 @@ local function setupMinimapButton()
             end
         end,
         OnTooltipShow = function(tt)
-            tt:AddLine(ADDON_NAME)
+            tt:AddLine(ADDON_TITLE)
             if scanning then
                 tt:AddLine("|cff00ff00Scanning|r — " .. matchLabel(matchCount) .. " this session.", 1, 1, 1)
                 if lastMatchSender then
