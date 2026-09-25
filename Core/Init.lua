@@ -4,7 +4,11 @@ local ADDON_NAME, ns = ...
 -- file is safe to load first on any client. Anything version-sensitive lives in Core/Compat.lua.
 
 ns.name = ADDON_NAME
-ns.PREFIX = "|cffffff00[ChatScan]:|r "
+
+-- Spaced name for everything the player reads. ns.name stays unspaced because it is the
+-- addon folder and the LibDBIcon registry key, neither of which may change.
+ns.TITLE = "Chat Scan"
+ns.PREFIX = "|cffffff00[" .. ns.TITLE .. "]:|r "
 ns.ICON = "Interface\\Icons\\INV_Misc_Spyglass_03"
 
 ns.DEDUP_TTL = 10

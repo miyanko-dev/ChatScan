@@ -7,7 +7,7 @@ function ns.SetupMinimapButton()
 
     local dataObject = LDB:NewDataObject(ns.name, {
         type = "launcher",
-        text = ns.name,
+        text = ns.TITLE,
         icon = ns.ICON,
         OnClick = function(_, button)
             if button == "LeftButton" then
@@ -16,7 +16,7 @@ function ns.SetupMinimapButton()
         end,
         OnTooltipShow = function(tt)
             local Scanner = ns.Scanner
-            tt:AddLine(ns.name)
+            tt:AddLine(ns.TITLE)
             if Scanner.scanning and Scanner.chatLocked then
                 tt:AddLine("|cffff8000Chat locked by client|r, matching paused.", 1, 1, 1)
             elseif Scanner.scanning then

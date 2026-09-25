@@ -352,7 +352,7 @@ local function buildPanel()
 
     local version = Compat.AddonVersion()
     -- SetTitle and SetPortraitToAsset both come from PortraitFrameMixin, which ButtonFrameTemplate carries on 1.15.9 and 1.60.1 alike.
-    frame:SetTitle(version and (ns.name .. " " .. version) or ns.name)
+    frame:SetTitle(version and (ns.TITLE .. " " .. version) or ns.TITLE)
     frame:SetPortraitToAsset(ns.ICON)
 
     -- The template's single inset is replaced by two column insets in the same area, the pattern Blizzard's own multi-list frames use.
