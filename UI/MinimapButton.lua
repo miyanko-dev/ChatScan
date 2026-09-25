@@ -38,3 +38,19 @@ function ns.SetupMinimapButton()
     })
     LibStub("LibDBIcon-1.0"):Register(ns.name, dataObject, ns.Store.Minimap())
 end
+
+-- Forever also lists the addon in the Addon Compartment: the toc names these three globals, and the
+-- compartment calls them with the addon name first. Era has no compartment and never calls them.
+function ChatScan_CompartmentClick()
+    ns.TogglePanel()
+end
+
+function ChatScan_CompartmentEnter(_, menuButton)
+    GameTooltip:SetOwner(menuButton, "ANCHOR_LEFT")
+    showTooltip(GameTooltip)
+    GameTooltip:Show()
+end
+
+function ChatScan_CompartmentLeave()
+    GameTooltip:Hide()
+end

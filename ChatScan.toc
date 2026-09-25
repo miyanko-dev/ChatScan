@@ -1,10 +1,13 @@
-## Interface: 16001
+## Interface: 11509, 16001
 ## Title: Chat Scan
 ## Notes: Scan chat channels for keyword groups (OR across rows, AND within a row). Open with /cs or the minimap button.
 ## Author: miyanko
-## Version: 2.0.0
+## Version: 2.1.0
 ## IconTexture: 134442
 ## SavedVariables: ChatScanDB
+## AddonCompartmentFunc: ChatScan_CompartmentClick
+## AddonCompartmentFuncOnEnter: ChatScan_CompartmentEnter
+## AddonCompartmentFuncOnLeave: ChatScan_CompartmentLeave
 
 # Libs are fetched by the packager from .pkgmeta externals, not tracked in git.
 Libs\LibStub\LibStub.lua

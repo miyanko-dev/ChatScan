@@ -97,15 +97,18 @@ local function deliver(line)
 end
 
 -- Built like Blizzard's own channel line: GetPlayerLink carries lineID, chat type and channel so
--- the right-click menu works, and raid markers render unless the sender suppressed them.
+-- the right-click menu works, and raid markers render unless the sender suppressed them. The shown
+-- name is ambiguated like ChatFrameUtil.GetDecoratedSenderName does, while the link keeps the full
+-- name so a whisper reaches the right player.
 local function showMatch(msg, sender, channelName, channelIndex, lineID, suppressRaidIcons)
     local stamp = date("%H:%M")
-    local link = GetPlayerLink(sender, "|cffffff00[" .. sender .. "]:|r", lineID, "CHANNEL", tostring(channelIndex))
+    local shownName = Ambiguate(sender, "none")
+    local link = GetPlayerLink(sender, "|cffffff00[" .. shownName .. "]:|r", lineID, "CHANNEL", tostring(channelIndex))
     local text = C_ChatInfo.ReplaceIconAndGroupExpressions(msg, suppressRaidIcons, true)
     deliver("|cff7f7f7f[" .. stamp .. "]|r |cff40c0ff[" .. channelName .. "]|r " .. link .. " " .. text)
 
     Scanner.matchCount = Scanner.matchCount + 1
-    Scanner.lastMatchSender = sender
+    Scanner.lastMatchSender = shownName
     Scanner.lastMatchStamp = stamp
     fireChanged()
 
