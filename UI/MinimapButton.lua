@@ -1,38 +1,40 @@
 local _, ns = ...
 
-function ns.SetupMinimapButton()
-    local LDB = LibStub("LibDataBroker-1.1")
-    local LDBIcon = LibStub("LibDBIcon-1.0")
-    if LDBIcon:IsRegistered(ns.name) then return end
+local COMMANDS = {
+    { "/cs <KEYWORD>", "adds a keyword and starts scanning." },
+    { "/cs <KW1>,<KW2>", "adds an AND combination." },
+    { "/cs start", "begins a scan." },
+    { "/cs stop", "ends the scan." },
+    { "/cs clear", "empties the keyword list." },
+}
 
-    local dataObject = LDB:NewDataObject(ns.name, {
+-- Written with Blizzard's tooltip line helpers so the colours match every native tooltip.
+local function showTooltip(tooltip)
+    local Scanner = ns.Scanner
+    GameTooltip_SetTitle(tooltip, ns.TITLE)
+    if Scanner.scanning and Scanner.chatLocked then
+        GameTooltip_AddHighlightLine(tooltip, WARNING_FONT_COLOR:WrapTextInColorCode("Chat locked by client") .. ", matching paused.")
+    elseif Scanner.scanning then
+        GameTooltip_AddHighlightLine(tooltip, GREEN_FONT_COLOR:WrapTextInColorCode("Scanning") .. ", " .. ns.matchLabel(Scanner.matchCount) .. " this session.")
+        if Scanner.lastMatchSender then
+            GameTooltip_AddHighlightLine(tooltip, string.format("Last: %s at %s", Scanner.lastMatchSender, Scanner.lastMatchStamp))
+        end
+    end
+    GameTooltip_AddInstructionLine(tooltip, "Left-click to toggle the panel.")
+    for _, command in ipairs(COMMANDS) do
+        GameTooltip_AddHighlightLine(tooltip, NORMAL_FONT_COLOR:WrapTextInColorCode(command[1]) .. " " .. command[2])
+    end
+end
+
+function ns.SetupMinimapButton()
+    local dataObject = LibStub("LibDataBroker-1.1"):NewDataObject(ns.name, {
         type = "launcher",
         text = ns.TITLE,
         icon = ns.ICON,
         OnClick = function(_, button)
-            if button == "LeftButton" then
-                ns.TogglePanel()
-            end
+            if button == "LeftButton" then ns.TogglePanel() end
         end,
-        OnTooltipShow = function(tt)
-            local Scanner = ns.Scanner
-            tt:AddLine(ns.TITLE)
-            if Scanner.scanning and Scanner.chatLocked then
-                tt:AddLine("|cffff8000Chat locked by client|r, matching paused.", 1, 1, 1)
-            elseif Scanner.scanning then
-                tt:AddLine("|cff00ff00Scanning|r, " .. ns.matchLabel(Scanner.matchCount) .. " this session.", 1, 1, 1)
-                if Scanner.lastMatchSender then
-                    tt:AddLine(string.format("Last: %s at %s", Scanner.lastMatchSender, Scanner.lastMatchStamp or "?"), 1, 1, 1)
-                end
-            end
-            tt:AddLine("|cffffd200Left-click|r to toggle the panel.", 1, 1, 1)
-            tt:AddLine("|cffffd200/cs <KEYWORD>|r adds a keyword and starts scanning.", 1, 1, 1)
-            tt:AddLine("|cffffd200/cs <KW1>,<KW2>|r adds an AND combination.", 1, 1, 1)
-            tt:AddLine("|cffffd200/cs start|r begins a scan.", 1, 1, 1)
-            tt:AddLine("|cffffd200/cs stop|r ends the scan.", 1, 1, 1)
-            tt:AddLine("|cffffd200/cs clear|r empties the keyword list.", 1, 1, 1)
-        end,
+        OnTooltipShow = showTooltip,
     })
-
-    LDBIcon:Register(ns.name, dataObject, ns.Store.Minimap())
+    LibStub("LibDBIcon-1.0"):Register(ns.name, dataObject, ns.Store.Minimap())
 end

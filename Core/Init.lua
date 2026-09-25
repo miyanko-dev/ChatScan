@@ -1,25 +1,31 @@
 local ADDON_NAME, ns = ...
 
--- Namespace root. Holds only values and helpers that need no Blizzard API at load time, so this
--- file is safe to load first on any client. Anything version-sensitive lives in Core/Compat.lua.
-
 ns.name = ADDON_NAME
 
 -- Spaced name for everything the player reads. ns.name stays unspaced because it is the
 -- addon folder and the LibDBIcon registry key, neither of which may change.
 ns.TITLE = "Chat Scan"
-ns.PREFIX = "|cffffff00[" .. ns.TITLE .. "]:|r "
-ns.ICON = "Interface\\Icons\\INV_Misc_Spyglass_03"
+ns.PREFIX = NORMAL_FONT_COLOR:WrapTextInColorCode("[" .. ns.TITLE .. "]:") .. " "
+
+-- interface/icons/inv_misc_spyglass_03.blp, the same file id as the toc's IconTexture.
+ns.ICON = 134442
 
 ns.DEDUP_TTL = 10
 ns.DEDUP_MAX = 20
 ns.SOUND_THROTTLE = 3.0
 
--- SOUNDKIT.MAP_PING, held as a literal so a saved sound id stays valid even if the constant
--- table is renamed. Core/Compat.lua resolves the named presets from SOUNDKIT itself.
-ns.DEFAULT_SOUND_ID = 3175
+-- Named alerts for the sound picker, so the player never types a raw sound kit id.
+ns.SOUNDS = {
+    { name = "Minimap Ping", id = SOUNDKIT.MAP_PING },
+    { name = "Whisper", id = SOUNDKIT.TELL_MESSAGE },
+    { name = "Raid Warning", id = SOUNDKIT.RAID_WARNING },
+    { name = "Ready Check", id = SOUNDKIT.READY_CHECK },
+    { name = "Auction Window", id = SOUNDKIT.AUCTION_WINDOW_OPEN },
+    { name = "Alarm Clock", id = SOUNDKIT.ALARM_CLOCK_WARNING_1 },
+}
+ns.DEFAULT_SOUND_ID = SOUNDKIT.MAP_PING
 
--- ChatFrame2 is the combat log on both clients and never receives forwarded lines.
+-- ChatFrame2 is always reset and docked as the combat log, so it never receives forwarded lines.
 ns.COMBAT_LOG_INDEX = 2
 
 function ns.notify(msg)
@@ -34,11 +40,9 @@ function ns.trim(text)
     return (text or ""):match("^%s*(.-)%s*$")
 end
 
--- Zone channels carry their zone as a " - Zone" suffix in both GetChannelList and
--- CHAT_MSG_CHANNEL, so the suffix is dropped to keep a scan alive across zone changes.
--- Custom channel names cannot contain spaces, so they are never truncated.
+-- Zone channels carry a " - Zone" suffix, so it is dropped to keep a scan alive across zone
+-- changes. Custom channel names cannot contain spaces, so they are never truncated.
 function ns.channelKey(name)
-    local key = strlower(name or "")
-    key = key:gsub("%s+%-%s+.*$", "")
+    local key = strlower(name or ""):gsub("%s+%-%s+.*$", "")
     return key
 end

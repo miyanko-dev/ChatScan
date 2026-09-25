@@ -1,94 +1,79 @@
 local _, ns = ...
 
+local Design = ns.Design
 local Scanner = ns.Scanner
 local Store = ns.Store
-local Compat = ns.Compat
 
--- ButtonFrameTemplate anchors its Inset at TOPLEFT (4, -60) and BOTTOMRIGHT (-6, 26) on both 1.15.9 and 1.60.1; the panel is sized from these so the two column insets fill exactly that area.
-local INSET_TOP = 60
-local INSET_BOTTOM = 26
-local INSET_LEFT = 4
-local INSET_RIGHT = 6
+local SPACE = Design.SPACE
+local FONT = Design.FONT
+local CONTROL_H = Design.CONTROL_H
 
-local PANEL_W = 620
-local COL_GAP = 4
-local PAD = 12                -- inset border -> content
-local GAP = 8                 -- between sibling widgets
-local SECTION_GAP = 16        -- between two sections in a column
-local ROW_H = 22              -- native UIPanelButton / input height
-local DROPDOWN_H = 24         -- WowStyle1DropdownTemplate is 60x24 on 1.15.x and 120x25 on 1.60.x
-local ROW_GAP = 4
-local CB_SIZE = 24
-local HEADER_GAP = 6          -- header -> helper, helper -> content
-local BUTTON_BAR_Y = 4        -- button bar content sits this far above the frame bottom
-local ATTIC_TEXT_X = 62       -- same left edge the template gives its own title text
+-- Two columns of 296 each: 616 = XS margin + 296 + XS gap + 296 + XS margin.
+local PANEL_W = 616
+local DROPDOWN_W = 160
+local ADD_W = 48
+local TEST_W = 64
+local START_W = 96
+
+-- InputBoxTemplate draws its left border 5px outside the frame; an XS inset lines the visible
+-- border up with the checkbox art above it.
+local INPUT_INSET = SPACE.XS
 
 local panel
 
--- UICheckButtonTemplate exposes .Text on both clients; the template anchors it for a 32px box, so re-anchor for the 24px size.
-local function setCheckboxLabel(checkButton, text)
-    local label = checkButton.Text
-    if not label then
-        label = checkButton:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        checkButton.Text = label
-    end
-    label:SetFontObject(GameFontHighlight)
-    label:SetText(text)
-    label:ClearAllPoints()
-    label:SetPoint("LEFT", checkButton, "RIGHT", 2, 0)
+local function createText(parent, font)
+    local text = parent:CreateFontString(nil, "ARTWORK")
+    text:SetFontObject(font)
+    text:SetJustifyH("LEFT")
+    return text
 end
 
--- Checkbox pool per list, so channel joins and reloads never leak frames.
-local function acquireCheckbox(list, parent)
-    local cb = table.remove(list.pool)
-    if not cb then
-        cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
-        cb:SetSize(CB_SIZE, CB_SIZE)
-    end
-    cb:SetParent(parent)
-    cb:Show()
-    list.active[#list.active + 1] = cb
-    return cb
+local function createButton(parent, label, width)
+    local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+    button:SetSize(width, CONTROL_H)
+    button:SetText(label)
+    return button
 end
 
-local function releaseCheckboxes(list)
-    for _, cb in ipairs(list.active) do
-        cb:Hide()
-        cb:ClearAllPoints()
-        cb:SetScript("OnClick", nil)
-        list.pool[#list.pool + 1] = cb
-    end
-    wipe(list.active)
-    if list.empty then list.empty:Hide() end
+-- UICheckButtonTemplate anchors its label for a 32px box; at CONTROL_H it sits flush right.
+local function createCheckbox(parent)
+    local checkbox = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
+    checkbox:SetSize(CONTROL_H, CONTROL_H)
+    checkbox.Text:SetFontObject(FONT.TEXT)
+    checkbox.Text:ClearAllPoints()
+    checkbox.Text:SetPoint("LEFT", checkbox, "RIGHT")
+    return checkbox
 end
 
--- Renders entries as a vertical checkbox list anchored to the container top. Returns the height used.
-local function renderCheckList(list, container, entries, isChecked, onClick, emptyText)
-    releaseCheckboxes(list)
-    if #entries == 0 then
-        if not list.empty then
-            list.empty = container:CreateFontString(nil, "ARTWORK", "GameFontDisable")
-            list.empty:SetPoint("TOPLEFT", container, "TOPLEFT", 4, -4)
+-- A checkbox list with a pool, so channel joins and tab changes never leak frames.
+local function createCheckList(container, emptyText)
+    local list = { active = {}, pool = {} }
+    local empty = createText(container, FONT.HELPER)
+    empty:SetPoint("LEFT", container, "TOPLEFT", 0, -CONTROL_H / 2)
+    empty:SetText(emptyText)
+
+    -- Renders entries top-down and returns the height used.
+    function list:Render(entries, isChecked, onClick)
+        for _, checkbox in ipairs(self.active) do
+            checkbox:Hide()
+            self.pool[#self.pool + 1] = checkbox
         end
-        list.empty:SetText(emptyText)
-        list.empty:Show()
-        return CB_SIZE
-    end
-    local previous
-    for _, entry in ipairs(entries) do
-        local cb = acquireCheckbox(list, container)
-        cb:ClearAllPoints()
-        if previous then
-            cb:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -ROW_GAP)
-        else
-            cb:SetPoint("TOPLEFT", container, "TOPLEFT", 0, 0)
+        wipe(self.active)
+        empty:SetShown(#entries == 0)
+
+        for i, entry in ipairs(entries) do
+            local checkbox = table.remove(self.pool) or createCheckbox(container)
+            checkbox:SetPoint("TOPLEFT", container, "TOPLEFT", 0, -(i - 1) * CONTROL_H)
+            checkbox.Text:SetText(entry.name)
+            checkbox:SetChecked(isChecked(entry))
+            checkbox:SetScript("OnClick", function(self) onClick(entry, self:GetChecked()) end)
+            checkbox:Show()
+            self.active[i] = checkbox
         end
-        setCheckboxLabel(cb, entry.name)
-        cb:SetChecked(isChecked(entry))
-        cb:SetScript("OnClick", function(self) onClick(entry, self:GetChecked()) end)
-        previous = cb
+        return math.max(#entries, 1) * CONTROL_H
     end
-    return #entries * CB_SIZE + (#entries - 1) * ROW_GAP
+
+    return list
 end
 
 local function channelEntries()
@@ -96,123 +81,132 @@ local function channelEntries()
     local entries, seen = {}, {}
     for i = 1, #list, 3 do
         local name = list[i + 1]
-        if type(name) == "string" and name ~= "" then
-            local key = ns.channelKey(name)
-            if not seen[key] then
-                seen[key] = true
-                entries[#entries + 1] = { name = name, key = key }
-            end
+        local key = ns.channelKey(name)
+        if not seen[key] then
+            seen[key] = true
+            entries[#entries + 1] = { name = name, key = key }
         end
     end
     return entries
 end
 
--- A section is a yellow header, a grey helper line and a content frame, stacked inside a column inset.
-local function createSection(inset, title, helperText)
-    -- Only TOP* anchors are used anywhere in a section, so each frame has exactly one vertical constraint. A LEFT or RIGHT point would silently add a second one by aligning vertical centres. The initial anchors also give the helper a width, which it needs before its wrapped height can be measured.
-    local section = CreateFrame("Frame", nil, inset)
-    section:SetPoint("TOPLEFT", inset, "TOPLEFT", PAD, -PAD)
-    section:SetPoint("TOPRIGHT", inset, "TOPRIGHT", -PAD, -PAD)
+-- A heading, a grey helper line and a content frame. Only TOP* anchors, so every frame has one
+-- vertical constraint; the helper's two anchors give it the width it needs to measure its wrap.
+local function createSection(column, title, helperText)
+    local section = CreateFrame("Frame", nil, column)
+    section:SetPoint("TOPLEFT", SPACE.S, -SPACE.S)
+    section:SetPoint("TOPRIGHT", -SPACE.S, -SPACE.S)
 
-    local header = section:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    header:SetPoint("TOPLEFT", section, "TOPLEFT", 0, 0)
-    header:SetText(title)
+    local heading = createText(section, FONT.HEADING)
+    heading:SetPoint("TOPLEFT")
+    heading:SetText(title)
 
-    local helper = section:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    helper:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -HEADER_GAP)
-    helper:SetPoint("TOPRIGHT", section, "TOPRIGHT", 0, 0)
-    helper:SetJustifyH("LEFT")
-    helper:SetWordWrap(true)
-    helper:SetTextColor(0.6, 0.6, 0.6)
+    local helper = createText(section, FONT.HELPER)
+    helper:SetPoint("TOPLEFT", heading, "BOTTOMLEFT", 0, -SPACE.XS)
+    helper:SetPoint("TOPRIGHT", 0, 0)
     helper:SetText(helperText)
 
-    local content = CreateFrame("Frame", nil, section)
-    content:SetPoint("TOPLEFT", helper, "BOTTOMLEFT", 0, -HEADER_GAP)
-    content:SetPoint("TOPRIGHT", helper, "BOTTOMRIGHT", 0, -HEADER_GAP)
-    content:SetHeight(ROW_H)
+    section.content = CreateFrame("Frame", nil, section)
+    section.content:SetPoint("TOPLEFT", helper, "BOTTOMLEFT", 0, -SPACE.XS)
+    section.content:SetPoint("TOPRIGHT", helper, "BOTTOMRIGHT", 0, -SPACE.XS)
 
-    section.header = header
-    section.helper = helper
-    section.content = content
-
-    -- Section height follows the measured helper text, so long helpers never overlap the content.
+    -- Height follows the measured helper text, so a long helper never overlaps its content.
     function section:Layout(contentHeight)
-        content:SetHeight(math.max(contentHeight, 1))
-        local h = header:GetStringHeight() + HEADER_GAP + math.ceil(helper:GetStringHeight()) + HEADER_GAP + contentHeight
-        section:SetHeight(h)
-        return h
+        self.content:SetHeight(contentHeight)
+        self:SetHeight(heading:GetStringHeight() + SPACE.XS + helper:GetStringHeight() + SPACE.XS + contentHeight)
     end
 
     return section
 end
 
--- Stacks sections top-down inside an inset and returns the inset height they need.
-local function stackSections(inset, sections)
-    local previous
-    for _, section in ipairs(sections) do
-        section:ClearAllPoints()
-        if previous then
-            section:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -SECTION_GAP)
-            section:SetPoint("TOPRIGHT", previous, "BOTTOMRIGHT", 0, -SECTION_GAP)
-        else
-            section:SetPoint("TOPLEFT", inset, "TOPLEFT", PAD, -PAD)
-            section:SetPoint("TOPRIGHT", inset, "TOPRIGHT", -PAD, -PAD)
-        end
-        previous = section
-    end
-    local total = PAD * 2
+-- Stacks laid-out sections in a column and returns the height the column needs.
+local function stackSections(column, sections)
+    local height = SPACE.S
     for i, section in ipairs(sections) do
-        total = total + section:GetHeight()
-        if i > 1 then total = total + SECTION_GAP end
+        if i > 1 then
+            height = height + SPACE.M
+            section:ClearAllPoints()
+            section:SetPoint("TOPLEFT", sections[i - 1], "BOTTOMLEFT", 0, -SPACE.M)
+            section:SetPoint("TOPRIGHT", sections[i - 1], "BOTTOMRIGHT", 0, -SPACE.M)
+        end
+        height = height + section:GetHeight()
     end
-    return total
+    return height + SPACE.S
 end
 
--- Keyword rows mirror the slash command: one row is one OR group, commas inside a row are AND terms. Rows are pooled; the trailing row is always empty for the next entry.
+-- Keyword rows mirror the slash command: one row is an OR group, commas inside it are AND terms.
+-- The trailing row is always empty and ready for the next rule.
 local KeywordRows = { active = {}, pool = {} }
 
+local function persistKeywords()
+    local keywords = {}
+    for _, row in ipairs(KeywordRows.active) do
+        if row.saved then keywords[#keywords + 1] = row.saved end
+    end
+    Store.Get().keywords = keywords
+    Scanner.ReloadKeywords()
+end
+
+local function commitRow(row)
+    local typed = ns.trim(row.editBox:GetText())
+    if typed == "" then return end
+    for _, other in ipairs(KeywordRows.active) do
+        if other ~= row and other.saved == typed then
+            typed = row.saved
+            break
+        end
+    end
+    row.saved = typed
+    row.editBox:SetText(typed or "")
+    row.editBox:ClearFocus()
+    row:UpdateState()
+    persistKeywords()
+    panel:RefreshKeywords()
+end
+
+local function deleteRow(row)
+    tDeleteItem(KeywordRows.active, row)
+    row.saved = nil
+    row:Hide()
+    KeywordRows.pool[#KeywordRows.pool + 1] = row
+    persistKeywords()
+    panel:RefreshKeywords()
+end
+
+-- An empty row shows no button, a typed row shows Add, a saved and unchanged row shows remove.
 local function createKeywordRow(parent)
     local row = CreateFrame("Frame", nil, parent)
-    row:SetHeight(ROW_H)
+    row:SetHeight(CONTROL_H)
 
     local editBox = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
     editBox:SetAutoFocus(false)
-    editBox:SetFontObject(ChatFontNormal)
+    editBox:SetFontObject(FONT.TEXT)
     editBox:SetMaxLetters(256)
-    editBox:SetHeight(ROW_H)
-    -- InputBoxTemplate draws its left border 5px outside the frame, so offset the box to keep the visible edge flush.
-    editBox:SetPoint("LEFT", row, "LEFT", 6, 0)
+    editBox:SetHeight(CONTROL_H)
     row.editBox = editBox
 
-    local addBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-    addBtn:SetSize(48, ROW_H)
-    addBtn:SetPoint("RIGHT", row, "RIGHT", 0, 0)
-    addBtn:SetText("Add")
-    addBtn:Hide()
-    row.addBtn = addBtn
+    local addBtn = createButton(row, "Add", ADD_W)
+    addBtn:SetPoint("RIGHT")
 
-    local removeBtn = CreateFrame("Button", nil, row, "UIPanelCloseButton")
-    removeBtn:SetSize(CB_SIZE, CB_SIZE)
-    removeBtn:SetPoint("RIGHT", row, "RIGHT", 2, 0)
-    removeBtn:Hide()
-    row.removeBtn = removeBtn
+    local removeBtn = CreateFrame("Button", nil, row, "UIPanelCloseButtonNoScripts")
+    removeBtn:SetSize(CONTROL_H, CONTROL_H)
+    removeBtn:SetPoint("RIGHT")
 
     function row:UpdateState()
         local typed = ns.trim(editBox:GetText())
+        local isSaved = self.saved ~= nil and typed == self.saved
+        local isTyped = typed ~= "" and not isSaved
+        addBtn:SetShown(isTyped)
+        removeBtn:SetShown(isSaved)
+
         editBox:ClearAllPoints()
-        editBox:SetPoint("LEFT", row, "LEFT", 6, 0)
-        if row.saved and typed == row.saved then
-            addBtn:Hide()
-            removeBtn:Show()
-            editBox:SetPoint("RIGHT", removeBtn, "LEFT", 0, 0)
-        elseif typed ~= "" then
-            removeBtn:Hide()
-            addBtn:Show()
-            editBox:SetPoint("RIGHT", addBtn, "LEFT", -GAP, 0)
+        editBox:SetPoint("LEFT", INPUT_INSET, 0)
+        if isSaved then
+            editBox:SetPoint("RIGHT", removeBtn, "LEFT", -SPACE.XS, 0)
+        elseif isTyped then
+            editBox:SetPoint("RIGHT", addBtn, "LEFT", -SPACE.XS, 0)
         else
-            addBtn:Hide()
-            removeBtn:Hide()
-            editBox:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+            editBox:SetPoint("RIGHT")
         end
     end
 
@@ -224,349 +218,230 @@ local function createKeywordRow(parent)
         self:ClearFocus()
         row:UpdateState()
     end)
-    editBox:SetScript("OnEnterPressed", function() KeywordRows.Commit(row) end)
-    addBtn:SetScript("OnClick", function() KeywordRows.Commit(row) end)
-    removeBtn:SetScript("OnClick", function() KeywordRows.Delete(row) end)
+    editBox:SetScript("OnEnterPressed", function() commitRow(row) end)
+    addBtn:SetScript("OnClick", function() commitRow(row) end)
+    removeBtn:SetScript("OnClick", function() deleteRow(row) end)
 
     return row
 end
 
-function KeywordRows.Acquire(parent)
+local function addKeywordRow(parent, keyword)
     local row = table.remove(KeywordRows.pool) or createKeywordRow(parent)
-    row:SetParent(parent)
-    row:Show()
-    return row
-end
-
-function KeywordRows.Release(row)
-    row.saved = nil
-    row.editBox:SetText("")
-    row:ClearAllPoints()
-    row:Hide()
-    KeywordRows.pool[#KeywordRows.pool + 1] = row
-end
-
-function KeywordRows.Add(parent, text, savedAs)
-    local row = KeywordRows.Acquire(parent)
-    row.saved = savedAs
-    row.editBox:SetText(text or "")
+    row.saved = keyword
+    row.editBox:SetText(keyword or "")
     row.editBox:SetCursorPosition(0)
+    row:UpdateState()
+    row:Show()
     KeywordRows.active[#KeywordRows.active + 1] = row
-    row:UpdateState()
-    return row
 end
 
-function KeywordRows.Persist()
-    local store = Store.Get()
-    store.keywords = {}
-    for _, row in ipairs(KeywordRows.active) do
-        if row.saved and row.saved ~= "" then
-            store.keywords[#store.keywords + 1] = row.saved
-        end
-    end
-    Scanner.ReloadKeywords(store)
-end
-
-function KeywordRows.EnsureTrailingEmpty(parent)
+-- Keeps one empty row at the end, lays rows out top-down and returns the height used.
+local function layoutKeywordRows(parent)
     local last = KeywordRows.active[#KeywordRows.active]
-    if not last or (last.saved and last.saved ~= "") then
-        KeywordRows.Add(parent, nil, nil)
-    end
-end
+    if not last or last.saved then addKeywordRow(parent, nil) end
 
--- Lays rows out top-down and returns the height used.
-function KeywordRows.Layout(container)
     for i, row in ipairs(KeywordRows.active) do
-        row:ClearAllPoints()
-        local y = -(i - 1) * (ROW_H + ROW_GAP)
-        row:SetPoint("TOPLEFT", container, "TOPLEFT", 0, y)
-        row:SetPoint("TOPRIGHT", container, "TOPRIGHT", 0, y)
-        row:SetHeight(ROW_H)
+        local y = -(i - 1) * (CONTROL_H + SPACE.XS)
+        row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, y)
+        row:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, y)
     end
-    local n = #KeywordRows.active
-    return n > 0 and (n * ROW_H + (n - 1) * ROW_GAP) or ROW_H
+    local count = #KeywordRows.active
+    return count * CONTROL_H + (count - 1) * SPACE.XS
 end
 
-function KeywordRows.Commit(row)
-    local typed = ns.trim(row.editBox:GetText())
-    if typed == "" then return end
-    for _, other in ipairs(KeywordRows.active) do
-        if other ~= row and other.saved == typed then
-            row.editBox:SetText(row.saved or "")
-            row.editBox:ClearFocus()
-            row:UpdateState()
-            return
-        end
+local function populateKeywordRows(parent)
+    for i = #KeywordRows.active, 1, -1 do
+        local row = KeywordRows.active[i]
+        row:Hide()
+        KeywordRows.pool[#KeywordRows.pool + 1] = row
+        KeywordRows.active[i] = nil
     end
-    row.saved = typed
-    row.editBox:ClearFocus()
-    row:UpdateState()
-    KeywordRows.Persist()
-    if panel then panel:RefreshKeywords() end
+    for _, keyword in ipairs(Store.Get().keywords) do
+        addKeywordRow(parent, keyword)
+    end
 end
 
-function KeywordRows.Delete(row)
-    for i, r in ipairs(KeywordRows.active) do
-        if r == row then
-            table.remove(KeywordRows.active, i)
-            KeywordRows.Release(row)
-            break
-        end
-    end
-    KeywordRows.Persist()
-    if panel then panel:RefreshKeywords() end
-end
-
-function KeywordRows.Populate(parent, store)
-    for _, row in ipairs(KeywordRows.active) do
-        KeywordRows.Release(row)
-    end
-    wipe(KeywordRows.active)
-    for _, keyword in ipairs(store.keywords or {}) do
-        KeywordRows.Add(parent, keyword, keyword)
-    end
-    KeywordRows.EnsureTrailingEmpty(parent)
-end
-
--- UIPanelButtonTemplate is a three-slice button on both clients (Left, Middle, Right) and exposes no NormalTexture, so recolouring means tinting those three pieces.
-local function buttonBodyTextures(button)
-    local pieces = {}
-    for _, key in ipairs({ "Left", "Middle", "Right" }) do
-        if button[key] then pieces[#pieces + 1] = button[key] end
-    end
-    return pieces
+-- The column insets replace the template's single Inset, in the same band between header and footer.
+local function createColumn(frame, side)
+    local column = CreateFrame("Frame", nil, frame, "InsetFrameTemplate")
+    local x = side == "LEFT" and SPACE.XS or -SPACE.XS
+    column:SetPoint("TOP" .. side, frame, "TOP" .. side, x, -Design.HEADER_H)
+    column:SetPoint("BOTTOM" .. side, frame, "BOTTOM" .. side, x, Design.FOOTER_H)
+    column:SetWidth((PANEL_W - 3 * SPACE.XS) / 2)
+    return column
 end
 
 local function buildPanel()
     local frame = CreateFrame("Frame", "ChatScanFrame", UIParent, "ButtonFrameTemplate")
-    frame:SetSize(PANEL_W, 400)
+    frame:SetWidth(PANEL_W)
     frame:SetPoint("CENTER")
     frame:SetFrameStrata("DIALOG")
     frame:SetToplevel(true)
     frame:SetMovable(true)
-    frame:EnableMouse(true)
     frame:SetClampedToScreen(true)
+    frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-
-    local version = Compat.AddonVersion()
-    -- SetTitle and SetPortraitToAsset both come from PortraitFrameMixin, which ButtonFrameTemplate carries on 1.15.9 and 1.60.1 alike.
-    frame:SetTitle(version and (ns.TITLE .. " " .. version) or ns.TITLE)
+    frame:SetTitle(ns.TITLE .. " " .. C_AddOns.GetAddOnMetadata(ns.name, "Version"))
     frame:SetPortraitToAsset(ns.ICON)
+    frame.Inset:Hide()
 
-    -- The template's single inset is replaced by two column insets in the same area, the pattern Blizzard's own multi-list frames use.
-    if frame.Inset then frame.Inset:Hide() end
-    local colW = (PANEL_W - INSET_LEFT - INSET_RIGHT - COL_GAP) / 2
+    local left = createColumn(frame, "LEFT")
+    local right = createColumn(frame, "RIGHT")
 
-    local leftInset = CreateFrame("Frame", nil, frame, "InsetFrameTemplate")
-    leftInset:SetPoint("TOPLEFT", frame, "TOPLEFT", INSET_LEFT, -INSET_TOP)
-    leftInset:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", INSET_LEFT, INSET_BOTTOM)
-    leftInset:SetWidth(colW)
-
-    local rightInset = CreateFrame("Frame", nil, frame, "InsetFrameTemplate")
-    rightInset:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -INSET_RIGHT, -INSET_TOP)
-    rightInset:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -INSET_RIGHT, INSET_BOTTOM)
-    rightInset:SetWidth(colW)
-
-    -- Attic summary line, the band between the title bar and the insets. Starts at x=62 like the template's own title text, clear of the portrait circle that reaches down into the attic on 1.15.9. Both anchors are BOTTOM* so the line has one vertical constraint.
-    local summary = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    summary:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", ATTIC_TEXT_X, -(INSET_TOP - GAP))
-    summary:SetPoint("BOTTOMRIGHT", frame, "TOPRIGHT", -(INSET_RIGHT + PAD), -(INSET_TOP - GAP))
-    summary:SetJustifyH("LEFT")
-    summary:SetTextColor(0.7, 0.7, 0.7)
-    summary:SetText("Forward channel messages that match your keywords to the chat tabs you choose.")
-
-    -- Left column
-    local channelsSection = createSection(leftInset, "Scanned Channels",
+    local channelsSection = createSection(left, "Scanned Channels",
         "Pick which chat channels to scan. Zone channels stay selected when you change zones.")
-    local keywordsSection = createSection(leftInset, "Keywords",
+    local keywordsSection = createSection(left, "Keywords",
         "Each row matches on its own (OR). Separate keywords in one row with commas to require all of them (AND). Press Enter or Add to save a row.")
-
-    -- Right column
-    local outputsSection = createSection(rightInset, "Output Tabs",
+    local outputsSection = createSection(right, "Output Tabs",
         "Pick which chat tabs receive matches. With none selected, matches go to the default chat frame.")
-    local soundSection = createSection(rightInset, "Alert Sound",
+    local soundSection = createSection(right, "Alert Sound",
         "Play a sound when a keyword matches, at most once every 3 seconds.")
 
-    local channelList = { active = {}, pool = {} }
-    local outputList = { active = {}, pool = {} }
+    local channelList = createCheckList(channelsSection.content, "Not in any channels")
+    local outputList = createCheckList(outputsSection.content, "No chat tabs available")
 
-    -- Sound controls: checkbox, native dropdown, preview button.
-    local soundCheck = CreateFrame("CheckButton", nil, soundSection.content, "UICheckButtonTemplate")
-    soundCheck:SetSize(CB_SIZE, CB_SIZE)
-    soundCheck:SetPoint("TOPLEFT", soundSection.content, "TOPLEFT", 0, 0)
-    setCheckboxLabel(soundCheck, "Play sound on match")
+    local soundCheck = createCheckbox(soundSection.content)
+    soundCheck:SetPoint("TOPLEFT")
+    soundCheck.Text:SetText("Play sound on match")
     soundCheck:SetScript("OnClick", function(self)
-        local checked = self:GetChecked() and true or false
-        Store.Get().playSound = checked
-        Scanner.SetSoundEnabled(checked)
+        Store.Get().playSound = self:GetChecked()
     end)
 
     local soundDropdown = CreateFrame("DropdownButton", nil, soundSection.content, "WowStyle1DropdownTemplate")
-    soundDropdown:SetSize(160, DROPDOWN_H)
-    soundDropdown:SetPoint("TOPLEFT", soundCheck, "BOTTOMLEFT", 0, -ROW_GAP)
+    soundDropdown:SetSize(DROPDOWN_W, CONTROL_H)
+    soundDropdown:SetPoint("TOPLEFT", soundCheck, "BOTTOMLEFT", 0, -SPACE.XS)
     soundDropdown:SetDefaultText("Choose a sound")
     soundDropdown:SetupMenu(function(_, root)
-        for _, preset in ipairs(Compat.SoundPresets()) do
-            root:CreateRadio(preset.name,
-                function() return Scanner.GetSoundId() == preset.id end,
+        for _, sound in ipairs(ns.SOUNDS) do
+            root:CreateRadio(sound.name,
+                function() return Store.Get().soundId == sound.id end,
                 function()
-                    Store.Get().soundId = preset.id
-                    Scanner.SetSoundId(preset.id)
-                    Compat.PlaySound(preset.id)
+                    Store.Get().soundId = sound.id
+                    PlaySound(sound.id)
                 end)
         end
     end)
 
-    local testBtn = CreateFrame("Button", nil, soundSection.content, "UIPanelButtonTemplate")
-    testBtn:SetSize(56, ROW_H)
-    testBtn:SetPoint("LEFT", soundDropdown, "RIGHT", GAP, 0)
-    testBtn:SetText("Test")
-    testBtn:SetScript("OnClick", function() Compat.PlaySound(Scanner.GetSoundId()) end)
+    local testBtn = createButton(soundSection.content, "Test", TEST_W)
+    testBtn:SetPoint("LEFT", soundDropdown, "RIGHT", SPACE.XS, 0)
+    testBtn:SetScript("OnClick", function() PlaySound(Store.Get().soundId) end)
 
-    local SOUND_CONTENT_H = CB_SIZE + ROW_GAP + DROPDOWN_H
+    local SOUND_H = CONTROL_H + SPACE.XS + CONTROL_H
 
-    -- Button bar: live status on the left, Start/Stop on the right.
-    local startBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    startBtn:SetSize(96, ROW_H)
-    startBtn:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -INSET_RIGHT, BUTTON_BAR_Y)
-    local startBody = buttonBodyTextures(startBtn)
-    local startHighlight = startBtn:GetHighlightTexture()
+    -- Footer: live status on the left, Start/Stop on the right, centred on the button row.
+    local startBtn = createButton(frame, "Start", START_W)
+    startBtn:SetPoint("BOTTOMRIGHT", -SPACE.XS, SPACE.XS)
 
-    -- Both points are LEFT/RIGHT, which share one vertical constraint: the centre line of the button row.
-    local status = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    status:SetPoint("LEFT", frame, "BOTTOMLEFT", INSET_LEFT + PAD, BUTTON_BAR_Y + ROW_H / 2)
-    status:SetPoint("RIGHT", startBtn, "LEFT", -GAP, 0)
-    status:SetJustifyH("LEFT")
+    local status = createText(frame, FONT.TEXT)
+    status:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", SPACE.XS + SPACE.S, SPACE.XS + CONTROL_H)
+    status:SetPoint("BOTTOMRIGHT", startBtn, "BOTTOMLEFT", -SPACE.XS, 0)
 
+    -- UIPanelButtonTemplate is a three-slice button with no NormalTexture, so tint its slices.
     local function tintStart(r, g, b)
-        for _, tex in ipairs(startBody) do tex:SetVertexColor(r, g, b) end
-        if startHighlight then startHighlight:SetVertexColor(r, g, b) end
+        startBtn.Left:SetVertexColor(r, g, b)
+        startBtn.Middle:SetVertexColor(r, g, b)
+        startBtn.Right:SetVertexColor(r, g, b)
     end
 
     function frame:RefreshStatus()
+        local count = ns.matchLabel(Scanner.matchCount)
         if Scanner.scanning then
             startBtn:SetText("Stop")
             tintStart(1, 0.4, 0.4)
-            -- A scan can be running yet unable to match, because 1.60 may withhold chat text from
-            -- addons. Saying so beats showing a healthy green line that never counts anything.
+            -- A running scan can be unable to match while the client withholds chat text.
             if Scanner.chatLocked then
-                status:SetText("|cffff8000Chat locked by client|r  matching paused")
+                status:SetText(WARNING_FONT_COLOR:WrapTextInColorCode("Chat locked by client") .. "  matching paused")
             else
-                status:SetText("|cff40ff40Scanning|r  " .. ns.matchLabel(Scanner.matchCount))
+                status:SetText(GREEN_FONT_COLOR:WrapTextInColorCode("Scanning") .. "  " .. count)
             end
         else
             startBtn:SetText("Start")
             tintStart(1, 1, 1)
             if Scanner.matchCount > 0 then
-                status:SetText("|cff999999Stopped|r  " .. ns.matchLabel(Scanner.matchCount) .. " this session")
+                status:SetText(GRAY_FONT_COLOR:WrapTextInColorCode("Stopped") .. "  " .. count .. " this session")
             else
-                status:SetText("|cff999999Not scanning|r")
+                status:SetText(GRAY_FONT_COLOR:WrapTextInColorCode("Not scanning"))
             end
         end
     end
 
     startBtn:SetScript("OnClick", function()
-        if Scanner.scanning then
-            Scanner.Stop()
-        else
-            Scanner.Start()
-        end
-        frame:RefreshStatus()
+        if Scanner.scanning then Scanner.Stop() else Scanner.Start() end
     end)
 
-    local channelsH, keywordsH, outputsH = CB_SIZE, ROW_H, CB_SIZE
+    local channelsH, keywordsH, outputsH = CONTROL_H, CONTROL_H, CONTROL_H
 
     function frame:Resize()
         channelsSection:Layout(channelsH)
         keywordsSection:Layout(keywordsH)
         outputsSection:Layout(outputsH)
-        soundSection:Layout(SOUND_CONTENT_H)
-        local leftH = stackSections(leftInset, { channelsSection, keywordsSection })
-        local rightH = stackSections(rightInset, { outputsSection, soundSection })
-        frame:SetHeight(INSET_TOP + math.max(leftH, rightH) + INSET_BOTTOM)
+        soundSection:Layout(SOUND_H)
+        local leftH = stackSections(left, { channelsSection, keywordsSection })
+        local rightH = stackSections(right, { outputsSection, soundSection })
+        self:SetHeight(Design.HEADER_H + Design.Snap(math.max(leftH, rightH)) + Design.FOOTER_H)
     end
 
     function frame:RefreshChannels()
-        local store = Store.Get()
-        channelsH = renderCheckList(channelList, channelsSection.content, channelEntries(),
-            function(entry) return store.inputChannels[entry.key] and true or false end,
-            function(entry, checked)
-                store.inputChannels[entry.key] = checked and true or nil
-                Scanner.SetChannelEnabled(entry.key, checked)
-            end,
-            "(not in any channels)")
-        frame:Resize()
+        local channels = Store.Get().inputChannels
+        channelsH = channelList:Render(channelEntries(),
+            function(entry) return channels[entry.key] end,
+            function(entry, checked) channels[entry.key] = checked or nil end)
+        self:Resize()
     end
 
     function frame:RefreshOutputs()
-        local store = Store.Get()
-        outputsH = renderCheckList(outputList, outputsSection.content, Scanner.OutputWindows(),
-            function(entry) return store.outputs[entry.key] and true or false end,
-            function(entry, checked)
-                store.outputs[entry.key] = checked and true or nil
-                Scanner.SetOutputEnabled(entry.key, checked)
-            end,
-            "(no chat tabs available)")
-        frame:Resize()
+        local outputs = Store.Get().outputs
+        outputsH = outputList:Render(Scanner.OutputWindows(),
+            function(entry) return outputs[entry.key] end,
+            function(entry, checked) outputs[entry.key] = checked or nil end)
+        self:Resize()
     end
 
     function frame:RefreshKeywords()
-        KeywordRows.EnsureTrailingEmpty(keywordsSection.content)
-        keywordsH = KeywordRows.Layout(keywordsSection.content)
-        frame:Resize()
+        keywordsH = layoutKeywordRows(keywordsSection.content)
+        self:Resize()
     end
 
     function frame:PopulateKeywords()
-        KeywordRows.Populate(keywordsSection.content, Store.Get())
-        frame:RefreshKeywords()
+        populateKeywordRows(keywordsSection.content)
+        self:RefreshKeywords()
     end
 
+    -- The channel list stays live while the panel is open.
     frame:SetScript("OnShow", function(self)
-        local store = Store.Get()
-        Scanner.SetSoundEnabled(store.playSound ~= false)
-        Scanner.SetSoundId(store.soundId)
-        soundCheck:SetChecked(store.playSound ~= false)
+        soundCheck:SetChecked(Store.Get().playSound)
         soundDropdown:GenerateMenu()
-
         self:RefreshChannels()
         self:RefreshOutputs()
         self:PopulateKeywords()
         self:RefreshStatus()
-
-        -- Keep the channel list live while the panel is open.
         self:RegisterEvent("CHANNEL_UI_UPDATE")
         self:RegisterEvent("CHAT_MSG_CHANNEL_NOTICE")
     end)
-
     frame:SetScript("OnHide", function(self)
-        self:UnregisterEvent("CHANNEL_UI_UPDATE")
-        self:UnregisterEvent("CHAT_MSG_CHANNEL_NOTICE")
+        self:UnregisterAllEvents()
     end)
-
     frame:SetScript("OnEvent", function(self)
-        if self:IsShown() then self:RefreshChannels() end
+        self:RefreshChannels()
     end)
 
     Scanner.OnChanged(function()
         if frame:IsShown() then frame:RefreshStatus() end
     end)
 
-    tinsert(UISpecialFrames, "ChatScanFrame")
+    tinsert(UISpecialFrames, frame:GetName())
     frame:Hide()
     return frame
 end
 
 function ns.TogglePanel()
-    if not panel then panel = buildPanel() end
-    if panel:IsShown() then panel:Hide() else panel:Show() end
+    panel = panel or buildPanel()
+    panel:SetShown(not panel:IsShown())
 end
 
--- Called after slash commands change keywords so an open panel mirrors the store.
+-- Called after slash commands change keywords, so an open panel mirrors the store.
 function ns.RefreshPanel()
-    if panel and panel:IsShown() then
-        panel:PopulateKeywords()
-        panel:RefreshStatus()
-    end
+    if panel and panel:IsShown() then panel:PopulateKeywords() end
 end

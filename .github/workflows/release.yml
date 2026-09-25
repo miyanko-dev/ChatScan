@@ -1,0 +1,26 @@
+name: Package and release
+
+# Runs on annotated version tags. Without CF_API_KEY and a toc X-Curse-Project-ID the packager
+# skips the CurseForge upload and only publishes the zip as a GitHub release.
+on:
+  push:
+    tags:
+      - "**"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      CF_API_KEY: ${{ secrets.CF_API_KEY }}
+      GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      # Full history, so the packager can build a changelog from the previous tag.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # Installs subversion itself when .pkgmeta has svn externals.
+      - uses: BigWigsMods/packager@v2

@@ -1,15 +1,11 @@
-local ADDON_NAME, ns = ...
+local _, ns = ...
 
--- Login bootstrap only. Loads last so every Core and UI file has already registered itself.
-
+-- Loads last, so every Core and UI file has registered itself. Saved variables are in place by
+-- PLAYER_LOGIN, and nothing reads settings before it: slash commands and the panel need a player.
 local loader = CreateFrame("Frame")
-loader:RegisterEvent("ADDON_LOADED")
 loader:RegisterEvent("PLAYER_LOGIN")
-loader:SetScript("OnEvent", function(_, event, arg1)
-    if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
-        ns.Store.Get()
-    elseif event == "PLAYER_LOGIN" then
-        ns.SetupMinimapButton()
-        ns.Scanner.Resume()
-    end
+loader:SetScript("OnEvent", function()
+    ns.Store.Init()
+    ns.SetupMinimapButton()
+    ns.Scanner.Resume()
 end)
