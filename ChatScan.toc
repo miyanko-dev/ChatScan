@@ -1,13 +1,28 @@
-## Interface: 11509
+## Interface: 11509, 16001
 ## Title: ChatScan
 ## Notes: Scan chat channels for keyword groups (OR across rows, AND within a row). Open with /cs or the minimap button.
 ## Author: MIYANKO
-## Version: 1.0.0
+## Version: 1.3.0
 ## IconTexture: 134442
 ## SavedVariables: ChatScanDB
+
+# One toc for both clients. A second, flavour-suffixed toc would duplicate this file list for nothing:
+# no code branches on which toc loaded, every client difference is detected at runtime in Core\Compat.lua,
+# and a duplicated list only invites the two copies to drift apart.
+# Load order is the dependency order: Core exports ns.* before UI and Bootstrap read it.
 
 Libs\LibStub\LibStub.lua
 Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
 Libs\LibDataBroker-1.1\LibDataBroker-1.1.lua
 Libs\LibDBIcon-1.0\LibDBIcon-1.0.lua
-ChatScan.lua
+
+Core\Init.lua
+Core\Compat.lua
+Core\Store.lua
+Core\Scanner.lua
+Core\Commands.lua
+
+UI\Panel.lua
+UI\MinimapButton.lua
+
+Bootstrap.lua
