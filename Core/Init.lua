@@ -28,9 +28,10 @@ ns.SOUNDS = {
 ns.DEFAULT_SOUND_ID = SOUNDKIT.MAP_PING
 
 -- Chat that is not a numbered channel, labelled with Blizzard's chat settings strings. One tick
--- covers every event Blizzard prints under that chat, so leader lines count as their group's.
--- Outgoing whispers and canned emotes (/wave) carry no words from other players, so they are left
--- out; /e emotes are typed by the sender and stay in.
+-- covers every event Blizzard prints under that chat, so leader lines count as their group's and
+-- the player's own outgoing whispers count as whispers. Own lines are forwarded on purpose, so the
+-- owner can test in game; skipping them is a later decision. Canned emotes (/wave) are text the
+-- client writes, so they are left out; /e emotes are typed by the sender and stay in.
 ns.CHAT_GROUPS = {
     { title = "Guild", types = {
         { key = "guild", label = GUILD_CHAT, events = { "CHAT_MSG_GUILD" } },
@@ -48,8 +49,8 @@ ns.CHAT_GROUPS = {
         { key = "emote", label = EMOTE, events = { "CHAT_MSG_EMOTE" } },
     } },
     { title = "Whispers", types = {
-        { key = "whisper", label = WHISPER, events = { "CHAT_MSG_WHISPER" } },
-        { key = "bnwhisper", label = BN_WHISPER, events = { "CHAT_MSG_BN_WHISPER" } },
+        { key = "whisper", label = WHISPER, events = { "CHAT_MSG_WHISPER", "CHAT_MSG_WHISPER_INFORM" } },
+        { key = "bnwhisper", label = BN_WHISPER, events = { "CHAT_MSG_BN_WHISPER", "CHAT_MSG_BN_WHISPER_INFORM" } },
     } },
 }
 

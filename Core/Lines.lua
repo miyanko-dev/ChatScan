@@ -50,7 +50,7 @@ local function senderLink(event, chatType, chatGroup, ...)
 
     if chatType == "COMMUNITIES_CHANNEL" then
         return communityLink(sender, display, bnSenderID)
-    elseif chatType == "BN_WHISPER" then
+    elseif chatType == "BN_WHISPER" or chatType == "BN_WHISPER_INFORM" then
         return GetBNPlayerLink(sender, display, bnSenderID, lineID, chatGroup, chatTarget)
     elseif (chatType == "GUILD" or chatType == "GUILD_DISCORD") and isFromDiscord(discordInfo) then
         return GetDiscordUserLink(display, bnSenderID, discordInfo.userID, lineID, chatGroup, chatTarget)
