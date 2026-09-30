@@ -82,19 +82,28 @@ function Scanner.OutputWindows()
 end
 
 -- Falls back to the default chat frame when no output tab is picked. Flashes a tab only while its
--- frame is hidden, as Blizzard's own chat does.
-local function deliver(line)
+-- frame is hidden, as Blizzard's own chat does. The line carries the channel's colour and chat type
+-- id like Blizzard's, so a later colour change in the chat settings recolours it too.
+local function deliver(line, color)
     local outputs = ns.Store.Get().outputs
     local delivered = false
     for _, window in ipairs(Scanner.OutputWindows()) do
         local frame = _G["ChatFrame" .. window.index]
         if outputs[window.key] and frame then
-            frame:AddMessage(line)
+            frame:AddMessage(line, color.r, color.g, color.b, color.id)
             if not frame:IsShown() then FCF_StartAlertFlash(frame) end
             delivered = true
         end
     end
-    if not delivered then DEFAULT_CHAT_FRAME:AddMessage(line) end
+    if not delivered then DEFAULT_CHAT_FRAME:AddMessage(line, color.r, color.g, color.b, color.id) end
+end
+
+-- Blizzard's own sender decoration: ambiguated name, class colour when that chat type's setting
+-- asks for it, otherwise uncoloured so it takes the line colour. Blizzard's chat passes the first
+-- 14 payload fields and discordInfo, so the helper gets exactly those.
+local function decoratedSender(event, ...)
+    local text, sender, language, channelName, sender2, flags, zoneID, channelIndex, baseName, languageID, lineID, guid, bnSenderID, isMobile, _, _, _, discordInfo = ...
+    return ChatFrameUtil.GetDecoratedSenderName(event, text, sender, language, channelName, sender2, flags, zoneID, channelIndex, baseName, languageID, lineID, guid, bnSenderID, isMobile, discordInfo)
 end
 
 -- Community lines link through the community message, as Blizzard's chat does, so the right-click
@@ -110,26 +119,31 @@ local function communityLink(sender, display, bnSenderID)
     return GetPlayerCommunityLink(sender, display, clubId, streamId, id.epoch, id.position)
 end
 
--- The shown name is ambiguated like ChatFrameUtil.GetDecoratedSenderName does, while the link keeps
--- the full name so a whisper reaches the right player. A channel link carries lineID, chat type and
--- channel so the right-click menu works.
-local function senderLink(isCommunity, sender, lineID, channelIndex, bnSenderID)
-    local display = YELLOW_FONT_COLOR:WrapTextInColorCode("[" .. Ambiguate(sender, "none") .. "]:")
-    if isCommunity then return communityLink(sender, display, bnSenderID) end
+-- The link keeps the full name so a whisper reaches the right player. A channel link carries
+-- lineID, chat type and channel so the right-click menu works.
+local function senderLink(event, ...)
+    local _, sender, _, _, _, _, _, channelIndex, _, _, lineID, _, bnSenderID = ...
+    local display = "[" .. decoratedSender(event, ...) .. "]"
+    if event == "CHAT_MSG_COMMUNITIES_CHANNEL" then return communityLink(sender, display, bnSenderID) end
     return GetPlayerLink(sender, display, lineID, "CHANNEL", tostring(channelIndex))
 end
 
--- The channel tag takes the colour the player set for that channel, as Blizzard's chat line does.
-local function channelTag(channelBaseName, channelIndex)
-    local info = ChatTypeInfo["CHANNEL" .. channelIndex] or ChatTypeInfo.CHANNEL
-    return CreateColor(info.r, info.g, info.b):WrapTextInColorCode("[" .. ns.channelLabel(channelBaseName) .. "]")
+-- The channel link Blizzard's chat prints: left-click opens chat on that channel, right-click its
+-- menu. Blizzard skips it for an empty channel name, which ResolvePrefixedChannelName cannot parse.
+local function channelLink(channelName, channelIndex)
+    if channelName == "" then return "" end
+    local display = "[" .. ChatFrameUtil.ResolvePrefixedChannelName(channelName) .. "]"
+    return LinkUtil.FormatLink(LinkTypes.Channel, display, "channel", channelIndex) .. " "
 end
 
--- Raid markers render unless the sender suppressed them, as in Blizzard's chat.
-local function showMatch(msg, link, tag, suppressRaidIcons)
+-- Built like Blizzard's channel line: channel link, sender link, then the text, with raid markers
+-- rendered unless the sender suppressed them. Only the time stamp is ChatScan's own.
+local function showMatch(event, ...)
+    local msg, _, _, channelName, _, _, _, channelIndex, _, _, _, _, _, _, _, _, suppressRaidIcons = ...
     local stamp = GRAY_FONT_COLOR:WrapTextInColorCode("[" .. date("%H:%M") .. "]")
     local text = C_ChatInfo.ReplaceIconAndGroupExpressions(msg, suppressRaidIcons, true)
-    deliver(stamp .. " " .. tag .. " " .. link .. " " .. text)
+    local color = ChatTypeInfo["CHANNEL" .. channelIndex] or ChatTypeInfo.CHANNEL
+    deliver(stamp .. " " .. channelLink(channelName, channelIndex) .. senderLink(event, ...) .. ": " .. text, color)
 
     Scanner.matchCount = Scanner.matchCount + 1
     fireChanged()
@@ -153,12 +167,13 @@ local function setChatLocked(locked)
 end
 
 -- Both channel events are SecretInChatMessagingLockdown and share one payload: during lockdown
--- text, playerName and bnSenderID may arrive as secret values that string operations cannot use.
--- channelBaseName, channelIndex, lineID and suppressRaidIcons are NeverSecret, so the channel filter
--- runs first. Matching relies on the lockdown check alone; an extra issecretvalue guard on the text
--- waits for an in-game check.
-local function onChannelMessage(isCommunity, ...)
-    local msg, sender, _, _, _, _, _, channelIndex, channelBaseName, _, lineID, _, bnSenderID, _, _, _, suppressRaidIcons = ...
+-- text, playerName, guid, bnSenderID and discordInfo may arrive as secret values that string
+-- operations cannot use. channelName, channelIndex, channelBaseName, lineID and suppressRaidIcons are
+-- NeverSecret, so the channel filter runs first and the rest is read only outside lockdown.
+-- Matching relies on the lockdown check alone; an extra issecretvalue guard on the text waits for
+-- an in-game check.
+local function onChannelMessage(event, ...)
+    local msg, sender, _, _, _, _, _, _, channelBaseName = ...
     if not ns.Store.Get().inputChannels[ns.channelKey(channelBaseName)] then return end
 
     if C_ChatInfo.InChatMessagingLockdown() then
@@ -167,10 +182,7 @@ local function onChannelMessage(isCommunity, ...)
     end
     setChatLocked(false)
 
-    if matchesKeywords(msg) and not isDuplicate(sender, msg) then
-        local link = senderLink(isCommunity, sender, lineID, channelIndex, bnSenderID)
-        showMatch(msg, link, channelTag(channelBaseName, channelIndex), suppressRaidIcons)
-    end
+    if matchesKeywords(msg) and not isDuplicate(sender, msg) then showMatch(event, ...) end
 end
 
 -- ADDON_RESTRICTION_STATE_CHANGED fires before a restriction applies and after it lifts, so the
@@ -183,7 +195,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     if event == "ADDON_RESTRICTION_STATE_CHANGED" then
         RunNextFrame(refreshLockdown)
     else
-        onChannelMessage(event == "CHAT_MSG_COMMUNITIES_CHANNEL", ...)
+        onChannelMessage(event, ...)
     end
 end)
 

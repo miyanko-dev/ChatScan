@@ -7,8 +7,8 @@ Watches the chat channels you pick, community channels included, and forwards an
 - Keyword rules with **OR** across rows and **AND** within a row, case-insensitive plain text
 - Route matches to any chat tabs you choose; the receiving tab flashes if you are not looking at it
 - Scan any channel you are in: world and zone channels, custom channels, and community channels added to a chat tab
-- Each forwarded line is stamped with its time and source channel, the channel in its own chat colour
-- Click the sender's name to whisper, right-click for the usual player menu
+- Forwarded lines look like the game's own channel lines: the channel's chat colour, the numbered channel tag, and the sender in class colour when your chat settings colour names by class. Each line is stamped with its time
+- Click the sender's name to whisper, right-click for the usual player menu; click the channel tag to talk in that channel, right-click it for the channel menu
 - Matches deduplicated for 10 seconds, so the same line never repeats
 - Optional alert sound with preview, throttled to once every 3 seconds
 - Raid-target markers like `{star}` and `{skull}` rendered as icons, exactly as the game's own chat does

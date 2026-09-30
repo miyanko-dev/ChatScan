@@ -48,14 +48,3 @@ function ns.channelKey(name)
     local key = strlower(name or ""):gsub("%s+%-%s+.*$", "")
     return key
 end
-
--- Community channels are named Community:<clubId>:<streamId>, which Blizzard's chat shows as the
--- community and stream name. C_Club names turn secret in chat lockdown and are missing before the
--- club loads, so the raw name stays then; every other channel name passes through unchanged.
-function ns.channelLabel(name)
-    local clubId = ChatFrameUtil.GetCommunityAndStreamFromChannel(name)
-    if not clubId or C_ChatInfo.InChatMessagingLockdown() or not C_Club.GetClubInfo(clubId) then
-        return name
-    end
-    return ChatFrameUtil.ResolveChannelName(name)
-end

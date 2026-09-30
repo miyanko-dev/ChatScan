@@ -84,6 +84,17 @@ local function createCheckList(container, emptyText)
     return list
 end
 
+-- Community channels are named Community:<clubId>:<streamId>, which Blizzard's chat shows as the
+-- community and stream name. C_Club names turn secret in chat lockdown and are missing before the
+-- club loads, so the raw name stays then; every other channel name passes through unchanged.
+local function channelLabel(name)
+    local clubId = ChatFrameUtil.GetCommunityAndStreamFromChannel(name)
+    if not clubId or C_ChatInfo.InChatMessagingLockdown() or not C_Club.GetClubInfo(clubId) then
+        return name
+    end
+    return ChatFrameUtil.ResolveChannelName(name)
+end
+
 -- Every channel the player is in, community channels included. The key stays the raw channel name,
 -- so a renamed community keeps its tick.
 local function channelEntries()
@@ -94,7 +105,7 @@ local function channelEntries()
         local key = ns.channelKey(name)
         if not seen[key] then
             seen[key] = true
-            entries[#entries + 1] = { name = ns.channelLabel(name), key = key }
+            entries[#entries + 1] = { name = channelLabel(name), key = key }
         end
     end
     return entries
