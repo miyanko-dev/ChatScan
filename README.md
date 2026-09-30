@@ -1,12 +1,13 @@
 # Chat Scan
 
-Watches the chat channels you pick and forwards any message matching your keyword rules to the chat tabs you pick.
+Watches the chat channels you pick, community channels included, and forwards any message matching your keyword rules to the chat tabs you pick.
 
 ## Features
 
 - Keyword rules with **OR** across rows and **AND** within a row, case-insensitive plain text
 - Route matches to any chat tabs you choose; the receiving tab flashes if you are not looking at it
-- Each forwarded line is stamped with its time and source channel
+- Scan any channel you are in: world and zone channels, custom channels, and community channels added to a chat tab
+- Each forwarded line is stamped with its time and source channel, the channel in its own chat colour
 - Click the sender's name to whisper, right-click for the usual player menu
 - Matches deduplicated for 10 seconds, so the same line never repeats
 - Optional alert sound with preview, throttled to once every 3 seconds
@@ -26,7 +27,7 @@ Watches the chat channels you pick and forwards any message matching your keywor
 
 Open the panel with `/cs`, the minimap button or the Addon Compartment, then:
 
-- **Scanned Channels**: tick the channels to watch. The list updates as you join and leave channels. Community channels are not listed, because their messages never reach the scan.
+- **Scanned Channels**: tick the channels to watch. The list updates as you join and leave channels. Community channels show their community and stream name.
 - **Keywords**: type a rule in the trailing empty row and press **Add** or Enter. Commas inside a row require all of those words. Press the **X** to remove a rule.
 - **Output Tabs**: pick the open chat tabs that receive matches. With none picked, or when every picked tab is closed, matches go to the default chat frame.
 - **Alert Sound**: turn the alert on, pick a sound, and **Test** it.

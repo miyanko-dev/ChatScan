@@ -1,31 +1,23 @@
 local _, ns = ...
 
-local COMMANDS = {
-    { "/cs <KEYWORD>", "adds a keyword and starts scanning." },
-    { "/cs <KW1>,<KW2>", "adds an AND combination." },
-    { "/cs start", "begins a scan." },
-    { "/cs stop", "ends the scan." },
-    { "/cs clear", "empties the keyword list." },
-}
+-- One short line on the scan state, in the colours of the panel's status line.
+local function statusLine()
+    local Scanner = ns.Scanner
+    if not Scanner.scanning then
+        return GRAY_FONT_COLOR:WrapTextInColorCode("Not scanning")
+    elseif Scanner.chatLocked then
+        return WARNING_FONT_COLOR:WrapTextInColorCode("Chat locked by client")
+    elseif not Scanner.CanMatch() then
+        return WARNING_FONT_COLOR:WrapTextInColorCode("Nothing to match")
+    end
+    return GREEN_FONT_COLOR:WrapTextInColorCode("Scanning") .. ", " .. ns.matchLabel(Scanner.matchCount)
+end
 
 -- Written with Blizzard's tooltip line helpers so the colours match every native tooltip.
 local function showTooltip(tooltip)
-    local Scanner = ns.Scanner
     GameTooltip_SetTitle(tooltip, ns.TITLE)
-    if Scanner.scanning and Scanner.chatLocked then
-        GameTooltip_AddHighlightLine(tooltip, WARNING_FONT_COLOR:WrapTextInColorCode("Chat locked by client") .. ", matching paused.")
-    elseif Scanner.scanning and not Scanner.CanMatch() then
-        GameTooltip_AddHighlightLine(tooltip, WARNING_FONT_COLOR:WrapTextInColorCode("Nothing to match") .. ", add a keyword and tick a channel.")
-    elseif Scanner.scanning then
-        GameTooltip_AddHighlightLine(tooltip, GREEN_FONT_COLOR:WrapTextInColorCode("Scanning") .. ", " .. ns.matchLabel(Scanner.matchCount) .. " this session.")
-        if Scanner.lastMatchSender then
-            GameTooltip_AddHighlightLine(tooltip, string.format("Last: %s at %s", Scanner.lastMatchSender, Scanner.lastMatchStamp))
-        end
-    end
+    GameTooltip_AddHighlightLine(tooltip, statusLine())
     GameTooltip_AddInstructionLine(tooltip, "Left-click to toggle the panel.")
-    for _, command in ipairs(COMMANDS) do
-        GameTooltip_AddHighlightLine(tooltip, NORMAL_FONT_COLOR:WrapTextInColorCode(command[1]) .. " " .. command[2])
-    end
 end
 
 function ns.SetupMinimapButton()

@@ -84,17 +84,17 @@ local function createCheckList(container, emptyText)
     return list
 end
 
--- Community channels (Community:<club>:<stream>) arrive on CHAT_MSG_COMMUNITIES_CHANNEL, which the
--- scan does not read, so they are not offered.
+-- Every channel the player is in, community channels included. The key stays the raw channel name,
+-- so a renamed community keeps its tick.
 local function channelEntries()
     local list = { GetChannelList() }
     local entries, seen = {}, {}
     for i = 1, #list, 3 do
         local name = list[i + 1]
         local key = ns.channelKey(name)
-        if not seen[key] and not name:find("^Community:") then
+        if not seen[key] then
             seen[key] = true
-            entries[#entries + 1] = { name = name, key = key }
+            entries[#entries + 1] = { name = ns.channelLabel(name), key = key }
         end
     end
     return entries
