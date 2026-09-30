@@ -32,14 +32,14 @@ Open the panel with `/cs`, the minimap button or the Addon Compartment, then:
 - **Scanned Channels**: tick the channels to watch. The list updates as you join and leave channels. Community channels show their community and stream name.
 - **Community Streams**: tick community streams that are in none of your chat tabs. Adding a stream to a chat tab moves it to Scanned Channels and keeps its tick. The list is hidden while the game locks chat.
 - **Chat Types**: tick guild, group, nearby chat and whispers. Leader lines and raid warnings count as their group's chat, and your own outgoing whispers count as whispers. Built-in emotes such as `/wave` are not scanned.
-
-Your own messages are forwarded too, in channels, community streams and every chat type, on purpose: it lets you test your rules in game on your own. Whether to skip them is a later decision.
 - **Keywords**: type a rule in the trailing empty row and press **Add** or Enter. Commas inside a row require all of those words. Press the **X** to remove a rule.
 - **Output Tabs**: pick the open chat tabs that receive matches. With none picked, or when every picked tab is closed, matches go to the default chat frame.
 - **Alert Sound**: turn the alert on, pick a sound, and **Test** it.
 - **Start**: begins the scan. The button then reads **Stop**, and the status line under the title shows **Scanning** with the live match count.
 
 Channel, chat type, tab and sound changes apply to a running scan straight away. If a running scan has no keyword or nothing ticked left, the status line reads **Nothing to match**. Escape or the corner X closes the panel; drag it anywhere.
+
+Your own messages are forwarded too, in channels, community streams and every chat type, on purpose: it lets you test your rules in game on your own. Whether to skip them is a later decision.
 
 | Rule | Matches |
 | --- | --- |
