@@ -6,7 +6,8 @@ ns.Store = Store
 local store
 
 -- Scan settings are per character (ChatScanCharDB), so the client keeps characters apart instead of
--- a name key. ChatScanDB holds only what every character shares: the minimap button.
+-- a name key. ChatScanDB holds only what every character shares: the minimap button. Channels and
+-- community streams share inputChannels, keyed by channel name; chatTypes holds CHAT_GROUPS keys.
 function Store.Init()
     ChatScanDB = ChatScanDB or {}
     ChatScanDB.minimap = ChatScanDB.minimap or { hide = false, minimapPos = 195 }
@@ -15,6 +16,7 @@ function Store.Init()
     store = ChatScanCharDB
 
     store.inputChannels = store.inputChannels or {}
+    store.chatTypes = store.chatTypes or {}
     store.outputs = store.outputs or {}
     store.keywords = store.keywords or {}
     store.scanEnabled = store.scanEnabled or false

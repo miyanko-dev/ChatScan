@@ -27,6 +27,31 @@ ns.SOUNDS = {
 }
 ns.DEFAULT_SOUND_ID = SOUNDKIT.MAP_PING
 
+-- Chat that is not a numbered channel, labelled with Blizzard's chat settings strings. One tick
+-- covers every event Blizzard prints under that chat, so leader lines count as their group's.
+-- Outgoing whispers and canned emotes (/wave) carry no words from other players, so they are left
+-- out; /e emotes are typed by the sender and stay in.
+ns.CHAT_GROUPS = {
+    { title = "Guild", types = {
+        { key = "guild", label = GUILD_CHAT, events = { "CHAT_MSG_GUILD" } },
+        { key = "officer", label = OFFICER_CHAT, events = { "CHAT_MSG_OFFICER" } },
+    } },
+    { title = "Group", types = {
+        { key = "party", label = PARTY, events = { "CHAT_MSG_PARTY", "CHAT_MSG_PARTY_LEADER" } },
+        { key = "raid", label = RAID, events = { "CHAT_MSG_RAID", "CHAT_MSG_RAID_LEADER", "CHAT_MSG_RAID_WARNING" } },
+        { key = "instance", label = INSTANCE_CHAT, events = { "CHAT_MSG_INSTANCE_CHAT", "CHAT_MSG_INSTANCE_CHAT_LEADER" } },
+    } },
+    { title = "Nearby", types = {
+        { key = "say", label = SAY, events = { "CHAT_MSG_SAY" } },
+        { key = "yell", label = YELL, events = { "CHAT_MSG_YELL" } },
+        { key = "emote", label = EMOTE, events = { "CHAT_MSG_EMOTE" } },
+    } },
+    { title = "Whispers", types = {
+        { key = "whisper", label = WHISPER, events = { "CHAT_MSG_WHISPER" } },
+        { key = "bnwhisper", label = BN_WHISPER, events = { "CHAT_MSG_BN_WHISPER" } },
+    } },
+}
+
 -- ChatFrame2 is always reset and docked as the combat log, so it never receives forwarded lines.
 ns.COMBAT_LOG_INDEX = 2
 

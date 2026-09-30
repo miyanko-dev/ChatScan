@@ -82,68 +82,26 @@ function Scanner.OutputWindows()
 end
 
 -- Falls back to the default chat frame when no output tab is picked. Flashes a tab only while its
--- frame is hidden, as Blizzard's own chat does. The line carries the channel's colour and chat type
--- id like Blizzard's, so a later colour change in the chat settings recolours it too.
-local function deliver(line, color)
+-- frame is hidden, as Blizzard's own chat does. The colour and chat type id travel with the line
+-- like Blizzard's, so a later colour change in the chat settings recolours it too.
+local function deliver(line, r, g, b, id)
     local outputs = ns.Store.Get().outputs
     local delivered = false
     for _, window in ipairs(Scanner.OutputWindows()) do
         local frame = _G["ChatFrame" .. window.index]
         if outputs[window.key] and frame then
-            frame:AddMessage(line, color.r, color.g, color.b, color.id)
+            frame:AddMessage(line, r, g, b, id)
             if not frame:IsShown() then FCF_StartAlertFlash(frame) end
             delivered = true
         end
     end
-    if not delivered then DEFAULT_CHAT_FRAME:AddMessage(line, color.r, color.g, color.b, color.id) end
+    if not delivered then DEFAULT_CHAT_FRAME:AddMessage(line, r, g, b, id) end
 end
 
--- Blizzard's own sender decoration: ambiguated name, class colour when that chat type's setting
--- asks for it, otherwise uncoloured so it takes the line colour. Blizzard's chat passes the first
--- 14 payload fields and discordInfo, so the helper gets exactly those.
-local function decoratedSender(event, ...)
-    local text, sender, language, channelName, sender2, flags, zoneID, channelIndex, baseName, languageID, lineID, guid, bnSenderID, isMobile, _, _, _, discordInfo = ...
-    return ChatFrameUtil.GetDecoratedSenderName(event, text, sender, language, channelName, sender2, flags, zoneID, channelIndex, baseName, languageID, lineID, guid, bnSenderID, isMobile, discordInfo)
-end
-
--- Community lines link through the community message, as Blizzard's chat does, so the right-click
--- menu offers the community actions. The last community line is read inside its own event, like
--- Blizzard's chat reads it; without it the name shows unlinked, as there.
-local function communityLink(sender, display, bnSenderID)
-    local messageInfo, clubId, streamId = C_Club.GetInfoFromLastCommunityChatLine()
-    if not messageInfo then return display end
-    local id = messageInfo.messageId
-    if bnSenderID and bnSenderID ~= 0 then
-        return GetBNPlayerCommunityLink(sender, display, bnSenderID, clubId, streamId, id.epoch, id.position)
-    end
-    return GetPlayerCommunityLink(sender, display, clubId, streamId, id.epoch, id.position)
-end
-
--- The link keeps the full name so a whisper reaches the right player. A channel link carries
--- lineID, chat type and channel so the right-click menu works.
-local function senderLink(event, ...)
-    local _, sender, _, _, _, _, _, channelIndex, _, _, lineID, _, bnSenderID = ...
-    local display = "[" .. decoratedSender(event, ...) .. "]"
-    if event == "CHAT_MSG_COMMUNITIES_CHANNEL" then return communityLink(sender, display, bnSenderID) end
-    return GetPlayerLink(sender, display, lineID, "CHANNEL", tostring(channelIndex))
-end
-
--- The channel link Blizzard's chat prints: left-click opens chat on that channel, right-click its
--- menu. Blizzard skips it for an empty channel name, which ResolvePrefixedChannelName cannot parse.
-local function channelLink(channelName, channelIndex)
-    if channelName == "" then return "" end
-    local display = "[" .. ChatFrameUtil.ResolvePrefixedChannelName(channelName) .. "]"
-    return LinkUtil.FormatLink(LinkTypes.Channel, display, "channel", channelIndex) .. " "
-end
-
--- Built like Blizzard's channel line: channel link, sender link, then the text, with raid markers
--- rendered unless the sender suppressed them. Only the time stamp is ChatScan's own.
-local function showMatch(event, ...)
-    local msg, _, _, channelName, _, _, _, channelIndex, _, _, _, _, _, _, _, _, suppressRaidIcons = ...
+-- Only the time stamp in front is ChatScan's own; the rest of the line is Blizzard's.
+local function forward(line, r, g, b, id)
     local stamp = GRAY_FONT_COLOR:WrapTextInColorCode("[" .. date("%H:%M") .. "]")
-    local text = C_ChatInfo.ReplaceIconAndGroupExpressions(msg, suppressRaidIcons, true)
-    local color = ChatTypeInfo["CHANNEL" .. channelIndex] or ChatTypeInfo.CHANNEL
-    deliver(stamp .. " " .. channelLink(channelName, channelIndex) .. senderLink(event, ...) .. ": " .. text, color)
+    deliver(stamp .. " " .. line, r, g, b, id)
 
     Scanner.matchCount = Scanner.matchCount + 1
     fireChanged()
@@ -166,23 +124,61 @@ local function setChatLocked(locked)
     fireChanged()
 end
 
--- Both channel events are SecretInChatMessagingLockdown and share one payload: during lockdown
--- text, playerName, guid, bnSenderID and discordInfo may arrive as secret values that string
--- operations cannot use. channelName, channelIndex, channelBaseName, lineID and suppressRaidIcons are
--- NeverSecret, so the channel filter runs first and the rest is read only outside lockdown.
+-- Announces a lockdown change and says whether chat text and club data are readable now.
+local function canRead()
+    local locked = C_ChatInfo.InChatMessagingLockdown()
+    setChatLocked(locked)
+    return not locked
+end
+
+-- Chat type events and the chat type key that ticks them.
+local chatTypeOf = {}
+for _, group in ipairs(ns.CHAT_GROUPS) do
+    for _, chatType in ipairs(group.types) do
+        for _, event in ipairs(chatType.events) do chatTypeOf[event] = chatType.key end
+    end
+end
+
+-- Whether the player ticked this event's source: its chat type, or for channels the channel. Reads
+-- only the NeverSecret channelBaseName, so it is safe before the lockdown check.
+local function isTicked(event, ...)
+    local store = ns.Store.Get()
+    local typeKey = chatTypeOf[event]
+    if typeKey then return store.chatTypes[typeKey] end
+    local channelBaseName = select(9, ...)
+    return store.inputChannels[ns.channelKey(channelBaseName)]
+end
+
+-- Every chat event ChatScan reads is SecretInChatMessagingLockdown with one shared payload:
+-- during lockdown text, playerName, playerName2, guid, bnSenderID and discordInfo may arrive as
+-- secret values that string operations cannot use. The source filter and Blizzard's letterbox
+-- rule use NeverSecret fields only, so they run first and the rest is read outside lockdown.
 -- Matching relies on the lockdown check alone; an extra issecretvalue guard on the text waits for
 -- an in-game check.
-local function onChannelMessage(event, ...)
-    local msg, sender, _, _, _, _, _, _, channelBaseName = ...
-    if not ns.Store.Get().inputChannels[ns.channelKey(channelBaseName)] then return end
+local function onChatMessage(event, ...)
+    local hideSender = select(16, ...)
+    if hideSender or not isTicked(event, ...) or not canRead() then return end
 
-    if C_ChatInfo.InChatMessagingLockdown() then
-        setChatLocked(true)
-        return
+    local msg, sender = ...
+    if matchesKeywords(msg) and not isDuplicate(sender, msg) then forward(ns.Lines.Chat(event, ...)) end
+end
+
+-- A community stream that is in a chat tab is a chat channel and arrives as
+-- CHAT_MSG_COMMUNITIES_CHANNEL too, so only streams outside every chat tab are read here and no
+-- message forwards twice. CLUB_MESSAGE_ADDED itself is never secret, but GetMessageInfo is
+-- SecretInChatMessagingLockdown, so it waits for the lockdown check.
+local function onClubMessage(clubId, streamId, messageId)
+    local channelName = ChatFrameUtil.GetCommunitiesChannelName(clubId, streamId)
+    if not ns.Store.Get().inputChannels[ns.channelKey(channelName)] then return end
+    local localID = ChatFrameUtil.GetCommunitiesChannelLocalID(clubId, streamId)
+    if (localID and localID ~= 0) or not canRead() then return end
+
+    local message = C_Club.GetMessageInfo(clubId, streamId, messageId)
+    if not message or message.destroyed then return end
+    local author = message.author.name or ""
+    if matchesKeywords(message.content) and not isDuplicate(author, message.content) then
+        forward(ns.Lines.Stream(clubId, streamId, message))
     end
-    setChatLocked(false)
-
-    if matchesKeywords(msg) and not isDuplicate(sender, msg) then showMatch(event, ...) end
 end
 
 -- ADDON_RESTRICTION_STATE_CHANGED fires before a restriction applies and after it lifts, so the
@@ -194,47 +190,54 @@ end
 eventFrame:SetScript("OnEvent", function(_, event, ...)
     if event == "ADDON_RESTRICTION_STATE_CHANGED" then
         RunNextFrame(refreshLockdown)
+    elseif event == "CLUB_MESSAGE_ADDED" then
+        onClubMessage(...)
     else
-        onChannelMessage(event, ...)
+        onChatMessage(event, ...)
     end
 end)
 
-local function countChannels()
-    local n = 0
-    for _ in pairs(ns.Store.Get().inputChannels) do n = n + 1 end
+-- Ticked channels, community streams and chat types together.
+local function countSources()
+    local store, n = ns.Store.Get(), 0
+    for _ in pairs(store.inputChannels) do n = n + 1 end
+    for _ in pairs(store.chatTypes) do n = n + 1 end
     return n
 end
 
--- A running scan left with no keyword group or no channel stays on but can never match.
+-- A running scan left with no keyword group or no source stays on but can never match.
 function Scanner.CanMatch()
-    return #keywordGroups > 0 and countChannels() > 0
+    return #keywordGroups > 0 and countSources() > 0
 end
 
 -- Starts from saved settings. A resume after login or reload stays quiet about missing settings.
 local function begin(isResume)
     local store = ns.Store.Get()
     Scanner.ReloadKeywords()
-    local channels = countChannels()
+    local sources = countSources()
 
-    if #keywordGroups == 0 or channels == 0 then
+    if #keywordGroups == 0 or sources == 0 then
         if isResume then
             store.scanEnabled = false
         elseif #keywordGroups == 0 then
             ns.notify("No keywords entered. Open the scan panel to configure.")
         else
-            ns.notify("No input channels selected. Open the scan panel to configure.")
+            ns.notify("No channels or chat types selected. Open the scan panel to configure.")
         end
         return
     end
 
-    -- Community channels (Community:<clubId>:<streamId>) arrive on their own event.
+    -- Every source's event is registered, so ticks changed mid-scan apply at once. Community
+    -- channels (Community:<clubId>:<streamId>) arrive on their own event.
     eventFrame:RegisterEvent("CHAT_MSG_CHANNEL")
     eventFrame:RegisterEvent("CHAT_MSG_COMMUNITIES_CHANNEL")
+    eventFrame:RegisterEvent("CLUB_MESSAGE_ADDED")
     eventFrame:RegisterEvent("ADDON_RESTRICTION_STATE_CHANGED")
+    for event in pairs(chatTypeOf) do eventFrame:RegisterEvent(event) end
     Scanner.scanning = true
     Scanner.matchCount = 0
     store.scanEnabled = true
-    ns.notify(string.format("Scanning %d channel(s) for %d keyword group(s).", channels, #keywordGroups))
+    ns.notify(string.format("Scanning %d source(s) for %d keyword group(s).", sources, #keywordGroups))
 
     -- Surfaced at start, so a scan that cannot match never looks healthy.
     Scanner.chatLocked = C_ChatInfo.InChatMessagingLockdown()

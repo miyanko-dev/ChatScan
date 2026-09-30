@@ -20,6 +20,9 @@ local TEXT_GAP = 4
 local GAP = 8
 local SECTION_GAP = 16
 
+-- Two chat type groups share a row of the Chat Types section.
+local GRID_W = (COLUMN_W - 2 * PAD) / 2
+
 local DROPDOWN_W = 160
 local ADD_W = 56
 local TEST_W = 64
@@ -59,6 +62,10 @@ local function createCheckList(container, emptyText)
     local empty = createText(container, GameFontDisableSmall)
     empty:SetPoint("LEFT", container, "TOPLEFT", 0, -ROW_H / 2)
     empty:SetText(emptyText)
+
+    function list:SetEmptyText(text)
+        empty:SetText(text)
+    end
 
     -- Renders entries top-down and returns the height used.
     function list:Render(entries, isChecked, onClick)
@@ -109,6 +116,59 @@ local function channelEntries()
         end
     end
     return entries
+end
+
+-- Subscribed community streams that are in no chat tab, so they reach the scan only as community
+-- messages; a stream in a chat tab is a chat channel and listed with the channels. Guild streams
+-- are Guild and Officer chat under Chat Types. The key is the stream's channel name, so a stream
+-- keeps its tick when it moves into or out of a chat tab. Callers skip this in chat lockdown,
+-- where club and stream data are secret; before the clubs load the C_Club calls return nothing.
+local function streamEntries()
+    local entries = {}
+    for _, club in ipairs(C_Club.GetSubscribedClubs() or {}) do
+        if club.clubType ~= Enum.ClubType.Guild then
+            for _, stream in ipairs(C_Club.GetStreams(club.clubId) or {}) do
+                local clubId, streamId = club.clubId, stream.streamId
+                local localID = ChatFrameUtil.GetCommunitiesChannelLocalID(clubId, streamId)
+                if C_Club.IsSubscribedToStream(clubId, streamId) and not (localID and localID ~= 0) then
+                    entries[#entries + 1] = {
+                        name = ChatFrameUtil.GetCommunityAndStreamName(clubId, streamId),
+                        key = ns.channelKey(ChatFrameUtil.GetCommunitiesChannelName(clubId, streamId)),
+                    }
+                end
+            end
+        end
+    end
+    return entries
+end
+
+-- The chat type ticks, one titled block per CHAT_GROUPS group, two blocks side by side. Returns the
+-- checkboxes by key and the height used.
+local function createChatTypeGrid(content, onClick)
+    local checks, top, rowH = {}, 0, 0
+    for i, group in ipairs(ns.CHAT_GROUPS) do
+        local column = (i - 1) % 2
+        if column == 0 and i > 1 then
+            top = top + rowH + GAP
+            rowH = 0
+        end
+        local x = column * GRID_W
+
+        local title = createText(content, GameFontHighlightSmall)
+        title:SetPoint("TOPLEFT", x, -top)
+        title:SetText(group.title)
+        local titleH = title:GetStringHeight() + TEXT_GAP
+
+        for j, chatType in ipairs(group.types) do
+            local checkbox = createCheckbox(content)
+            checkbox:SetPoint("TOPLEFT", x, -(top + titleH + (j - 1) * ROW_H))
+            checkbox.Text:SetText(chatType.label)
+            checkbox:SetScript("OnClick", function(self) onClick(chatType.key, self:GetChecked()) end)
+            checks[chatType.key] = checkbox
+        end
+        rowH = math.max(rowH, titleH + #group.types * ROW_H)
+    end
+    return checks, top + rowH
 end
 
 -- A heading, a grey helper line and a content frame. Only TOP* anchors, so every frame has one
@@ -369,21 +429,37 @@ local function createStartButton(frame)
     return startBtn
 end
 
+-- Events that change the channel or community stream lists while the panel is open.
+local LIST_EVENTS = {
+    "CHANNEL_UI_UPDATE", "CHAT_MSG_CHANNEL_NOTICE",
+    "CLUB_ADDED", "CLUB_REMOVED", "CLUB_UPDATED", "CLUB_STREAMS_LOADED", "CLUB_STREAM_ADDED",
+    "CLUB_STREAM_REMOVED", "CLUB_STREAM_UPDATED", "CLUB_STREAM_SUBSCRIBED", "CLUB_STREAM_UNSUBSCRIBED",
+}
+
 local function buildPanel()
     local frame = createWindow()
     local left, right = createColumns(frame)
 
     local channelsSection = createSection(left, "Scanned Channels",
         "Pick which chat channels to scan. Zone channels stay selected when you change zones.")
+    local streamsSection = createSection(left, "Community Streams",
+        "Community streams that are in none of your chat tabs. A stream in a chat tab is listed under Scanned Channels.")
     local keywordsSection = createSection(left, "Keywords",
         "Each row matches on its own (OR). Separate keywords in one row with commas to require all of them (AND). Press Enter or Add to save a row.")
+    local chatTypesSection = createSection(right, "Chat Types",
+        "Pick which chat outside the channels to scan.")
     local outputsSection = createSection(right, "Output Tabs",
         "Pick which chat tabs receive matches. With none selected, matches go to the default chat frame.")
     local soundSection = createSection(right, "Alert Sound",
         "Play a sound when a keyword matches, at most once every 3 seconds.")
 
     local channelList = createCheckList(channelsSection.content, "Not in any channels")
+    local streamList = createCheckList(streamsSection.content, "")
     local outputList = createCheckList(outputsSection.content, "No chat tabs available")
+    local chatChecks, chatTypesH = createChatTypeGrid(chatTypesSection.content, function(key, checked)
+        Store.Get().chatTypes[key] = checked or nil
+        frame:RefreshStatus()
+    end)
     local soundCheck, soundDropdown, soundH = createSoundControls(soundSection.content)
     local status = createStatusLine(frame, right)
     local startBtn = createStartButton(frame)
@@ -394,11 +470,11 @@ local function buildPanel()
         if Scanner.scanning then
             startBtn:SetText("Stop")
             -- A running scan can be unable to match while the client withholds chat text, or once
-            -- every keyword or channel is gone.
+            -- every keyword or source is gone.
             if Scanner.chatLocked then
                 status:SetText(WARNING_FONT_COLOR:WrapTextInColorCode("Chat locked by client") .. "  matching paused")
             elseif not Scanner.CanMatch() then
-                status:SetText(WARNING_FONT_COLOR:WrapTextInColorCode("Nothing to match") .. "  add a keyword and tick a channel")
+                status:SetText(WARNING_FONT_COLOR:WrapTextInColorCode("Nothing to match") .. "  add a keyword and tick a source")
             else
                 status:SetText(GREEN_FONT_COLOR:WrapTextInColorCode("Scanning") .. "  " .. count)
             end
@@ -412,28 +488,42 @@ local function buildPanel()
         end
     end
 
-    local channelsH, keywordsH, outputsH = ROW_H, ROW_H, ROW_H
+    local channelsH, streamsH, keywordsH, outputsH = ROW_H, ROW_H, ROW_H, ROW_H
 
     -- The window grows with its content: the attic, the taller well and the button bar.
     function frame:Resize()
         channelsSection:Layout(channelsH)
+        streamsSection:Layout(streamsH)
         keywordsSection:Layout(keywordsH)
+        chatTypesSection:Layout(chatTypesH)
         outputsSection:Layout(outputsH)
         soundSection:Layout(soundH)
-        local leftH = stackSections(left, { channelsSection, keywordsSection })
-        local rightH = stackSections(right, { outputsSection, soundSection })
+        local leftH = stackSections(left, { channelsSection, streamsSection, keywordsSection })
+        local rightH = stackSections(right, { chatTypesSection, outputsSection, soundSection })
         self:SetHeight(math.ceil(-PANEL_INSET_ATTIC_OFFSET + math.max(leftH, rightH) + PANEL_INSET_BOTTOM_BUTTON_OFFSET))
     end
 
+    -- Channels and community streams render together, because a stream moves from one list to the
+    -- other when it joins or leaves a chat tab. Stream data is secret in chat lockdown, so the
+    -- stream list says so instead.
     function frame:RefreshChannels()
         local channels = Store.Get().inputChannels
-        channelsH = channelList:Render(channelEntries(),
-            function(entry) return channels[entry.key] end,
-            function(entry, checked)
-                channels[entry.key] = checked or nil
-                self:RefreshStatus()
-            end)
+        local function isChecked(entry) return channels[entry.key] end
+        local function onClick(entry, checked)
+            channels[entry.key] = checked or nil
+            self:RefreshStatus()
+        end
+        channelsH = channelList:Render(channelEntries(), isChecked, onClick)
+
+        local locked = C_ChatInfo.InChatMessagingLockdown()
+        streamList:SetEmptyText(locked and "Hidden while chat is locked" or "No other community streams")
+        streamsH = streamList:Render(locked and {} or streamEntries(), isChecked, onClick)
         self:Resize()
+    end
+
+    function frame:RefreshChatTypes()
+        local chatTypes = Store.Get().chatTypes
+        for key, checkbox in pairs(chatChecks) do checkbox:SetChecked(chatTypes[key]) end
     end
 
     function frame:RefreshOutputs()
@@ -454,16 +544,16 @@ local function buildPanel()
         self:RefreshKeywords()
     end
 
-    -- The channel list stays live while the panel is open.
+    -- The channel and stream lists stay live while the panel is open.
     frame:SetScript("OnShow", function(self)
         soundCheck:SetChecked(Store.Get().playSound)
         soundDropdown:GenerateMenu()
         self:RefreshChannels()
+        self:RefreshChatTypes()
         self:RefreshOutputs()
         self:PopulateKeywords()
         self:RefreshStatus()
-        self:RegisterEvent("CHANNEL_UI_UPDATE")
-        self:RegisterEvent("CHAT_MSG_CHANNEL_NOTICE")
+        FrameUtil.RegisterFrameForEvents(self, LIST_EVENTS)
     end)
     frame:SetScript("OnHide", function(self)
         self:UnregisterAllEvents()
