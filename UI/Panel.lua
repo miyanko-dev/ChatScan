@@ -1,16 +1,17 @@
 local _, ns = ...
 
-local Design = ns.Design
 local Scanner = ns.Scanner
 local Store = ns.Store
 
-local FONT = Design.FONT
-local ROW_H = Design.ROW_H
+-- One list row: checkboxes shrink from the template's 32px to the 24px of the close button that
+-- removes a keyword row. INPUT_H is the height of InputBoxTemplate's border art.
+local ROW_H = 24
+local INPUT_H = 20
 
 -- Two equal content wells side by side, inside the template's own inset margins.
 local PANEL_W = 616
 local COLUMN_GAP = 4
-local COLUMN_W = (PANEL_W - Design.INSET_LEFT + Design.INSET_RIGHT - COLUMN_GAP) / 2
+local COLUMN_W = (PANEL_W - PANEL_INSET_LEFT_OFFSET + PANEL_INSET_RIGHT_OFFSET - COLUMN_GAP) / 2
 
 -- Padding inside a content well, the gap under a heading, the gap between controls, and the gap
 -- between sections.
@@ -22,7 +23,6 @@ local SECTION_GAP = 16
 local DROPDOWN_W = 160
 local ADD_W = 56
 local TEST_W = 64
-local START_W = 80
 
 -- InputBoxTemplate draws its left border 5px outside the edit box, so the box sits in a little to
 -- line the visible border up with the checkbox art above it.
@@ -40,7 +40,7 @@ end
 
 local function createButton(parent, label, width)
     local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-    button:SetSize(width, Design.BUTTON_H)
+    button:SetWidth(width)
     button:SetText(label)
     return button
 end
@@ -49,14 +49,14 @@ end
 local function createCheckbox(parent)
     local checkbox = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
     checkbox:SetSize(ROW_H, ROW_H)
-    checkbox.Text:SetFontObject(FONT.TEXT)
+    checkbox.Text:SetFontObject(GameFontHighlight)
     return checkbox
 end
 
 -- A checkbox list with a pool, so channel joins and tab changes never leak frames.
 local function createCheckList(container, emptyText)
     local list = { active = {}, pool = {} }
-    local empty = createText(container, FONT.HELPER)
+    local empty = createText(container, GameFontDisableSmall)
     empty:SetPoint("LEFT", container, "TOPLEFT", 0, -ROW_H / 2)
     empty:SetText(emptyText)
 
@@ -107,11 +107,11 @@ local function createSection(column, title, helperText)
     section:SetPoint("TOPLEFT", PAD, -PAD)
     section:SetPoint("TOPRIGHT", -PAD, -PAD)
 
-    local heading = createText(section, FONT.HEADING)
+    local heading = createText(section, GameFontNormal)
     heading:SetPoint("TOPLEFT")
     heading:SetText(title)
 
-    local helper = createText(section, FONT.HELPER)
+    local helper = createText(section, GameFontDisableSmall)
     helper:SetPoint("TOPLEFT", heading, "BOTTOMLEFT", 0, -TEXT_GAP)
     helper:SetPoint("TOPRIGHT", 0, 0)
     helper:SetText(helperText)
@@ -193,7 +193,7 @@ local function createKeywordRow(parent)
     local editBox = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
     editBox:SetAutoFocus(false)
     editBox:SetMaxLetters(256)
-    editBox:SetHeight(Design.INPUT_H)
+    editBox:SetHeight(INPUT_H)
     row.editBox = editBox
 
     local addBtn = createButton(row, "Add", ADD_W)
@@ -271,48 +271,43 @@ local function populateKeywordRows(parent)
     end
 end
 
--- Two content wells replace the template's single Inset and take its edges, so both follow
--- Blizzard's own margins.
-local function createColumn(frame, side)
-    local column = CreateFrame("Frame", nil, frame, "InsetFrameTemplate")
-    column:SetPoint("TOP" .. side, frame.Inset, "TOP" .. side)
-    column:SetPoint("BOTTOM" .. side, frame.Inset, "BOTTOM" .. side)
-    column:SetWidth(COLUMN_W)
-    return column
-end
-
-local function buildPanel()
+-- A ButtonFrameTemplate tool window with the addon icon as portrait, moved by dragging and closed
+-- with Escape.
+local function createWindow()
     local frame = CreateFrame("Frame", "ChatScanFrame", UIParent, "ButtonFrameTemplate")
     frame:SetWidth(PANEL_W)
     frame:SetPoint("CENTER")
-    frame:SetFrameStrata("DIALOG")
+    frame:SetFrameStrata("HIGH")
     frame:SetToplevel(true)
-    frame:SetMovable(true)
     frame:SetClampedToScreen(true)
+    frame:SetMovable(true)
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-    frame:SetTitle(ns.TITLE .. " " .. C_AddOns.GetAddOnMetadata(ns.name, "Version"))
+    frame:SetTitle(ns.TITLE)
     frame:SetPortraitToAsset(ns.ICON)
-    frame.Inset:Hide()
+    tinsert(UISpecialFrames, frame:GetName())
+    frame:Hide()
+    return frame
+end
 
-    local left = createColumn(frame, "LEFT")
-    local right = createColumn(frame, "RIGHT")
+-- The template's Inset becomes the left well and a second InsetFrameTemplate the right one, both on
+-- Blizzard's own inset offsets.
+local function createColumns(frame)
+    local left = frame.Inset
+    left:SetPoint("BOTTOMRIGHT", frame, "BOTTOMLEFT", PANEL_INSET_LEFT_OFFSET + COLUMN_W, PANEL_INSET_BOTTOM_BUTTON_OFFSET)
 
-    local channelsSection = createSection(left, "Scanned Channels",
-        "Pick which chat channels to scan. Zone channels stay selected when you change zones.")
-    local keywordsSection = createSection(left, "Keywords",
-        "Each row matches on its own (OR). Separate keywords in one row with commas to require all of them (AND). Press Enter or Add to save a row.")
-    local outputsSection = createSection(right, "Output Tabs",
-        "Pick which chat tabs receive matches. With none selected, matches go to the default chat frame.")
-    local soundSection = createSection(right, "Alert Sound",
-        "Play a sound when a keyword matches, at most once every 3 seconds.")
+    local right = CreateFrame("Frame", nil, frame, "InsetFrameTemplate")
+    right:SetPoint("TOPLEFT", left, "TOPRIGHT", COLUMN_GAP, 0)
+    right:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", PANEL_INSET_RIGHT_OFFSET, PANEL_INSET_BOTTOM_BUTTON_OFFSET)
+    return left, right
+end
 
-    local channelList = createCheckList(channelsSection.content, "Not in any channels")
-    local outputList = createCheckList(outputsSection.content, "No chat tabs available")
-
-    local soundCheck = createCheckbox(soundSection.content)
+-- The alert toggle, a named sound picker that previews each pick, and a Test button. Returns the
+-- toggle, the picker and the height they use.
+local function createSoundControls(content)
+    local soundCheck = createCheckbox(content)
     soundCheck:SetPoint("TOPLEFT")
     soundCheck.Text:SetText("Play sound on match")
     soundCheck:SetScript("OnClick", function(self)
@@ -320,7 +315,7 @@ local function buildPanel()
     end)
 
     -- Only the width is set, so the dropdown keeps the template's own height.
-    local soundDropdown = CreateFrame("DropdownButton", nil, soundSection.content, "WowStyle1DropdownTemplate")
+    local soundDropdown = CreateFrame("DropdownButton", nil, content, "WowStyle1DropdownTemplate")
     soundDropdown:SetWidth(DROPDOWN_W)
     soundDropdown:SetPoint("TOPLEFT", soundCheck, "BOTTOMLEFT", 0, -TEXT_GAP)
     soundDropdown:SetDefaultText("Choose a sound")
@@ -335,32 +330,58 @@ local function buildPanel()
         end
     end)
 
-    local testBtn = createButton(soundSection.content, "Test", TEST_W)
+    local testBtn = createButton(content, "Test", TEST_W)
     testBtn:SetPoint("LEFT", soundDropdown, "RIGHT", GAP, 0)
     testBtn:SetScript("OnClick", function() PlaySound(Store.Get().soundId) end)
 
-    local SOUND_H = ROW_H + TEXT_GAP + soundDropdown:GetHeight()
+    return soundCheck, soundDropdown, ROW_H + TEXT_GAP + soundDropdown:GetHeight()
+end
 
-    -- Footer: Start/Stop where Blizzard puts a button-bar button, live status left of it on its centre line.
-    local startBtn = createButton(frame, "Start", START_W)
-    startBtn:SetPoint("BOTTOMRIGHT", Design.BAR_BUTTON_X, Design.BAR_BUTTON_Y)
+-- The live status sits in the attic, right of the portrait and centred between title bar and wells.
+local function createStatusLine(frame, right)
+    local status = createText(frame, GameFontHighlight)
+    status:SetPoint("TOPLEFT", frame.TitleContainer, "BOTTOMLEFT")
+    status:SetPoint("BOTTOMRIGHT", right, "TOPRIGHT")
+    status:SetJustifyV("MIDDLE")
+    return status
+end
 
-    local status = createText(frame, FONT.TEXT)
-    status:SetPoint("LEFT", frame, "BOTTOMLEFT", Design.INSET_LEFT + PAD, Design.BAR_BUTTON_Y + Design.BUTTON_H / 2)
-    status:SetPoint("RIGHT", startBtn, "LEFT", -GAP, 0)
+-- The primary action in the button bar's bottom-right corner. MagicButton_OnLoad turns the zero
+-- offsets into Blizzard's corner offsets, so it runs once the anchor exists.
+local function createStartButton(frame)
+    local startBtn = CreateFrame("Button", nil, frame, "MagicButtonTemplate")
+    startBtn:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT")
+    MagicButton_OnLoad(startBtn)
+    startBtn:SetScript("OnClick", function()
+        if Scanner.scanning then Scanner.Stop() else Scanner.Start() end
+    end)
+    return startBtn
+end
 
-    -- UIPanelButtonTemplate is a three-slice button with no NormalTexture, so tint its slices.
-    local function tintStart(r, g, b)
-        startBtn.Left:SetVertexColor(r, g, b)
-        startBtn.Middle:SetVertexColor(r, g, b)
-        startBtn.Right:SetVertexColor(r, g, b)
-    end
+local function buildPanel()
+    local frame = createWindow()
+    local left, right = createColumns(frame)
 
+    local channelsSection = createSection(left, "Scanned Channels",
+        "Pick which chat channels to scan. Zone channels stay selected when you change zones.")
+    local keywordsSection = createSection(left, "Keywords",
+        "Each row matches on its own (OR). Separate keywords in one row with commas to require all of them (AND). Press Enter or Add to save a row.")
+    local outputsSection = createSection(right, "Output Tabs",
+        "Pick which chat tabs receive matches. With none selected, matches go to the default chat frame.")
+    local soundSection = createSection(right, "Alert Sound",
+        "Play a sound when a keyword matches, at most once every 3 seconds.")
+
+    local channelList = createCheckList(channelsSection.content, "Not in any channels")
+    local outputList = createCheckList(outputsSection.content, "No chat tabs available")
+    local soundCheck, soundDropdown, soundH = createSoundControls(soundSection.content)
+    local status = createStatusLine(frame, right)
+    local startBtn = createStartButton(frame)
+
+    -- The button label and the status line show whether a scan runs.
     function frame:RefreshStatus()
         local count = ns.matchLabel(Scanner.matchCount)
         if Scanner.scanning then
             startBtn:SetText("Stop")
-            tintStart(1, 0.4, 0.4)
             -- A running scan can be unable to match while the client withholds chat text, or once
             -- every keyword or channel is gone.
             if Scanner.chatLocked then
@@ -372,7 +393,6 @@ local function buildPanel()
             end
         else
             startBtn:SetText("Start")
-            tintStart(1, 1, 1)
             if Scanner.matchCount > 0 then
                 status:SetText(GRAY_FONT_COLOR:WrapTextInColorCode("Stopped") .. "  " .. count .. " this session")
             else
@@ -381,20 +401,17 @@ local function buildPanel()
         end
     end
 
-    startBtn:SetScript("OnClick", function()
-        if Scanner.scanning then Scanner.Stop() else Scanner.Start() end
-    end)
-
     local channelsH, keywordsH, outputsH = ROW_H, ROW_H, ROW_H
 
+    -- The window grows with its content: the attic, the taller well and the button bar.
     function frame:Resize()
         channelsSection:Layout(channelsH)
         keywordsSection:Layout(keywordsH)
         outputsSection:Layout(outputsH)
-        soundSection:Layout(SOUND_H)
+        soundSection:Layout(soundH)
         local leftH = stackSections(left, { channelsSection, keywordsSection })
         local rightH = stackSections(right, { outputsSection, soundSection })
-        self:SetHeight(math.ceil(Design.HEADER_H + math.max(leftH, rightH) + Design.FOOTER_H))
+        self:SetHeight(math.ceil(-PANEL_INSET_ATTIC_OFFSET + math.max(leftH, rightH) + PANEL_INSET_BOTTOM_BUTTON_OFFSET))
     end
 
     function frame:RefreshChannels()
@@ -448,8 +465,6 @@ local function buildPanel()
         if frame:IsShown() then frame:RefreshStatus() end
     end)
 
-    tinsert(UISpecialFrames, frame:GetName())
-    frame:Hide()
     return frame
 end
 

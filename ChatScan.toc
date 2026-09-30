@@ -21,7 +21,6 @@ Core\Store.lua
 Core\Scanner.lua
 Core\Commands.lua
 
-UI\Design.lua
 UI\Panel.lua
 UI\MinimapButton.lua
 

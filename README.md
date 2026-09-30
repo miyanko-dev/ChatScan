@@ -30,7 +30,7 @@ Open the panel with `/cs`, the minimap button or the Addon Compartment, then:
 - **Keywords**: type a rule in the trailing empty row and press **Add** or Enter. Commas inside a row require all of those words. Press the **X** to remove a rule.
 - **Output Tabs**: pick the open chat tabs that receive matches. With none picked, or when every picked tab is closed, matches go to the default chat frame.
 - **Alert Sound**: turn the alert on, pick a sound, and **Test** it.
-- **Start**: begins the scan. The button turns red and reads **Stop**, and the status line shows the live match count.
+- **Start**: begins the scan. The button then reads **Stop**, and the status line under the title shows **Scanning** with the live match count.
 
 Channel, tab and sound changes apply to a running scan straight away. If a running scan has no keyword or no channel left, the status line reads **Nothing to match**. Escape or the corner X closes the panel; drag it anywhere.
 
