@@ -1,6 +1,6 @@
 # ChatScan — Memory
 
-Updated 2026-09-30 after the Forever-only rework (3.0.0) and the owner's round-2 decisions (tooltip, every channel, Blizzard colours; still 3.0.0, unreleased). The owner's decision is WoW Forever 1.60.x only: `main` holds the Forever version and `1.15.x-backup` keeps the Classic version. Everything was verified against Gethe `forever` @ `966519cf` (1.60.1.70124) and Ketho `forever` @ `4149af64` (1.60.1.70009). The installed client is 1.60.1.70009. Nothing has run in a client yet.
+Updated 2026-09-30 after the Forever-only rework (3.0.0) and the owner's round-2 decisions (tooltip, every channel, Blizzard colours, match lines built like Blizzard's channel lines; still 3.0.0, unreleased). The owner's decision is WoW Forever 1.60.x only: `main` holds the Forever version and `1.15.x-backup` keeps the Classic version. Everything was verified against Gethe `forever` @ `966519cf` (1.60.1.70124) and Ketho `forever` @ `4149af64` (1.60.1.70009). The installed client is 1.60.1.70009. Nothing has run in a client yet.
 
 ## Current state
 
@@ -10,22 +10,22 @@ Scans every chat channel the player picks, community channels included, for keyw
 |---|---|
 | Version | 3.0.0, `## Interface: 16001` only, `## Category: Chat`, `AddonCompartmentFunc*` fields kept |
 | Author | `miyanko` |
-| Git | `main`: `fc105f1` (split), `4489dac` (fixes), `20ee3d8` (UI), `405ab65` (MEMORY.md), `5ea139b` (round 2: community channels, tooltip, colours), then the MEMORY.md commit. Not pushed. `1.15.x-backup` = `8d4c55c` (dual-client 2.1.0), local and on GitHub, untouched. `9184981` is the last Era-only build (1.0.0) and an ancestor of both |
+| Git | `main`: `fc105f1` (split), `4489dac` (fixes), `20ee3d8` (UI), `405ab65` (MEMORY.md), `5ea139b` (round 2: community channels, tooltip, colours), `e454960` (MEMORY.md), `1251793` (native sender colour and channel link), then the MEMORY.md commit. Not pushed. `1.15.x-backup` = `8d4c55c` (dual-client 2.1.0), local and on GitHub, untouched. `9184981` is the last Era-only build (1.0.0) and an ancestor of both |
 | Libraries | LibStub 2, CallbackHandler-1.0 8, LibDataBroker-1.1 4, LibDBIcon-1.0 56, tracked in `Libs/` (upstream trunk copies, unedited). No `.pkgmeta` externals, no `.gitignore` entry for them |
 | Saved variables | `ChatScanCharDB` (per character): channels, outputs, keywords, scan state, sound. `ChatScanDB` (account): only `minimap`, the LibDBIcon table. No migration: no Forever saved variables existed |
-| Offline checks | `luac -p` on all Lua files. No harness in the repo. Throwaway stub harnesses outside the repo: 3.0.0 rework Core 20/20, UI 30/30; round 2 Core 36/36, UI 37/37 (community events, labels, links, colours, tooltip) |
+| Offline checks | `luac -p` on all Lua files. No harness in the repo. Throwaway stub harnesses outside the repo: 3.0.0 rework Core 20/20, UI 30/30; round 2 Core 37/37, UI 40/40 (community events, labels in and out of lockdown, sender decoration, channel links, line colour and id, tooltip) |
 
 Behaviour:
 
 - No client branch, no `WOW_PROJECT_*`, no compat layer. Every API used is verified in the forever source.
-- `CHAT_MSG_CHANNEL` and `CHAT_MSG_COMMUNITIES_CHANNEL` have the same 18-field payload on Forever, field 18 is `discordInfo`, and both are `SecretInChatMessagingLockdown` (`ChatInfoDocumentation.lua:1483`). ChatScan reads 1 text, 2 playerName, 8 channelIndex, 9 channelBaseName, 11 lineID, 13 bnSenderID and 17 suppressRaidIcons. Fields 8, 9, 11 and 17 are `NeverSecret`; 1, 2 and 13 are not. ChatScan filters by channelBaseName first, then checks `C_ChatInfo.InChatMessagingLockdown()`, and only then reads the rest and matches.
+- `CHAT_MSG_CHANNEL` and `CHAT_MSG_COMMUNITIES_CHANNEL` have the same 18-field payload on Forever, field 18 is `discordInfo`, and both are `SecretInChatMessagingLockdown` (`ChatInfoDocumentation.lua:1483`). ChatScan filters on 9 channelBaseName, then checks `C_ChatInfo.InChatMessagingLockdown()`, and only then matches 1 text and builds the line from 2 playerName, 4 channelName, 8 channelIndex, 11 lineID, 12 guid, 13 bnSenderID, 17 suppressRaidIcons and 18 discordInfo. Fields 4, 8, 9, 11 and 17 are `NeverSecret`; 1, 2, 12, 13 and 18 are not.
 - While scanning, `ADDON_RESTRICTION_STATE_CHANGED` is registered too. It fires before a restriction applies and after it lifts (`RestrictedActionsDocumentation.lua`), so the lockdown is re-read one frame later with `RunNextFrame` (`Blizzard_SharedXMLBase/FunctionUtil.lua:126`).
-- A match line is `[HH:MM]` (`GRAY_FONT_COLOR`), `[channel]` in the player's colour for that channel (`ChatTypeInfo["CHANNEL"..channelIndex]`, `ChatTypeInfoConstants.lua:56-75`, 20 = `MaxChatChannels`, through `CreateColor`), the sender link (`YELLOW_FONT_COLOR`), then the text. The channel tag's old light blue imitated nothing Blizzard uses, so the tag now follows the chat colour like Blizzard's own line does.
-- The sender shows the way Blizzard's chat does (`Ambiguate(sender, "none")`); the link keeps the full name. Channel lines use `GetPlayerLink(..., "CHANNEL", tostring(channelIndex))`. Community lines use `C_Club.GetInfoFromLastCommunityChatLine()` and `GetPlayerCommunityLink`, or `GetBNPlayerCommunityLink` when bnSenderID is not 0, exactly like `Mainline/ChatFrameOverrides.lua:588-599`; without message info the name shows unlinked, as there. Both link types have Blizzard handlers (`Mainline/ItemRefHandlers.lua:50`, `Shared/ItemRefHandlersShared.lua:27`). `ReplaceIconAndGroupExpressions` matches Blizzard's chat code.
+- A match line is built like Blizzard's channel line (`Mainline/ChatFrameOverrides.lua:548-666`): `[HH:MM]` (`GRAY_FONT_COLOR`, ChatScan's own stamp), then Blizzard's channel link `|Hchannel:channel:N|h[N. Name]|h` (`LinkUtil.FormatLink(LinkTypes.Channel, ...)` gives the same string as line 657; the name goes through `ChatFrameUtil.ResolvePrefixedChannelName`, and an empty channel name gets no tag, as there), then `[sender]: text`. The whole line is added with `ChatTypeInfo["CHANNEL"..channelIndex]` r, g, b and id (`ChatTypeInfoConstants.lua:56-75`, 20 = `MaxChatChannels`), so the text is in the channel colour and a later colour change recolours it through `ChatFrameMixin:UpdateColorByID` (`Shared/ChatFrame.lua:235`). The channel link's click handler is `Shared/ItemRefHandlersShared.lua:29` (left-click opens chat on the channel, right-click the channel menu).
+- The sender name comes from `ChatFrameUtil.GetDecoratedSenderName` (`Shared/ChatFrameUtil.lua:1061`), called with payload fields 1 to 14 and discordInfo exactly as the chat frame calls it (`ChatFrameOverrides.lua:319`). It ambiguates the name, colours it by class only when `ChatFrameUtil.ShouldColorChatByClass(ChatTypeInfo[type])` says so (the `chatClassColorOverride` CVar, else `colorNameByClass`; type `CHANNELn` or `COMMUNITIES_CHANNEL`), adds the timerunning icon and runs the sender-name filters. Uncoloured, the name takes the line colour, which is Blizzard's default. No yellow. The link keeps the full name. Channel lines use `GetPlayerLink(..., "CHANNEL", tostring(channelIndex))`. Community lines use `C_Club.GetInfoFromLastCommunityChatLine()` and `GetPlayerCommunityLink`, or `GetBNPlayerCommunityLink` when bnSenderID is not 0, exactly like `Mainline/ChatFrameOverrides.lua:588-599`; without message info the name shows unlinked, as there. Both link types have Blizzard handlers (`Mainline/ItemRefHandlers.lua:50`, `Shared/ItemRefHandlersShared.lua:27`). `ReplaceIconAndGroupExpressions` matches Blizzard's chat code.
 - Chat output starts with the shared prefix `YELLOW_FONT_COLOR:WrapTextInColorCode("[Chat Scan]:") .. " "`. No literal `|cff` codes remain in addon code.
 - Output tabs are the active chat windows only (`FCF_IsChatWindowIndexActive`, `Blizzard_ChatFrameBase/Shared/FloatingChatFrame.lua:5`). A picked tab that is closed is skipped, so the line falls back to `DEFAULT_CHAT_FRAME`.
 - A tab flashes only while its frame is hidden, like `ChatFrameUtil.FlashTabIfNotShown` (`Shared/ChatFrameUtil.lua:1049`).
-- Every channel from `GetChannelList` is offered, community channels too (CS-9 filter reverted by the owner). A community channel is named `Community:<clubId>:<streamId>` and keyed by that raw name, so a renamed community keeps its tick. `ns.channelLabel` shows it through `ChatFrameUtil.ResolveChannelName`, as `ChatConfigFrame.lua:1724` does. It keeps the raw name in chat lockdown (`C_Club.GetClubInfo`/`GetStreamInfo` are `SecretInChatMessagingLockdown`, `ClubDocumentation.lua:400,727`, and `ResolveChannelName` does string work on those names) and before the club loads (`RequiresClubsInitialized` returns nothing).
+- Every channel from `GetChannelList` is offered, community channels too (CS-9 filter reverted by the owner). A community channel is named `Community:<clubId>:<streamId>` and keyed by that raw name, so a renamed community keeps its tick. The panel's `channelLabel` shows it through `ChatFrameUtil.ResolveChannelName`, as `ChatConfigFrame.lua:1724` does. It keeps the raw name in chat lockdown (`C_Club.GetClubInfo`/`GetStreamInfo` are `SecretInChatMessagingLockdown`, `ClubDocumentation.lua:400,727`, and `ResolveChannelName` does string work on those names) and before the club loads (`RequiresClubsInitialized` returns nothing).
 - Channel kinds checked: world/zone channels (General, Trade, LocalDefense, LookingForGroup, Services, Newcomer and so on) and custom channels arrive on `CHAT_MSG_CHANNEL`; community channels added to a chat tab on `CHAT_MSG_COMMUNITIES_CHANNEL`. Both are covered. Not channels, so not covered: guild and officer streams (they join chat as the `GUILD`/`OFFICER`/`GUILD_DISCORD` message groups, `CommunitiesStreams.lua:429-437`), community streams not added to any chat tab (no chat channel, only `CLUB_MESSAGE_ADDED`), the Group entries of the channel list (Party/Raid/Instance chat types) and voice channels. See feature questions.
 - A running scan with no keyword group or no ticked channel stays on and shows "Nothing to match" in the panel and the tooltip (`Scanner.CanMatch`).
 - Keyword dedupe ignores case in both the panel and `/cs`.
@@ -72,6 +72,7 @@ Native UI (shared spec):
    - `C_ChatInfo.InChatMessagingLockdown()` reports the new state one frame after `ADDON_RESTRICTION_STATE_CHANGED`. The docs only say the event fires before a restriction applies and after it lifts.
    - A docked tab that isn't selected has a hidden chat frame, so it flashes. Blizzard's `FlashTabIfNotShown` relies on the same.
    - `GetChannelList` names are never secret in lockdown (undocumented; unchanged since 3.0.0).
+   - Calling `ChatFrameUtil.GetDecoratedSenderName` from addon code outside lockdown behaves as in Blizzard's handler. It runs other addons' sender-name filters through Blizzard's secure registry, the same as for Blizzard's own lines.
 5. The attic status is anchored to `frame.TitleContainer` (a `PortraitFrameBaseTemplate` parentKey in Mainline `SharedUIPanelTemplates.xml`). Check in game that it sits clear of the portrait and the close button.
 6. Release workflow (`.github/workflows/release.yml`), not run yet:
    - `actions/checkout@v7`: UNVERIFIED that this major version exists. If it doesn't, the job fails at checkout.
@@ -81,20 +82,14 @@ Native UI (shared spec):
 
 ## Feature questions for the owner
 
-Round 1 (tooltip content, community channels) is decided and implemented in `5ea139b`. Open:
+Round 1 (tooltip content, community channels) is decided and implemented in `5ea139b`. Sender colour and the channel link were decided by the lead under the owner's "as native as possible" rule and implemented in `1251793`. Open:
 
-1. Sender colour. Today the sender is `YELLOW_FONT_COLOR`. Blizzard's chat colours the sender by class when the channel's "colour names by class" setting is on (`ChatFrameUtil.ShouldColorChatByClass`, `ChatFrameUtil.lua:891,1100`).
-   - Keep yellow: no change.
-   - Follow Blizzard: read field 12 (guid, not `NeverSecret`, so after the lockdown check), then `GetPlayerInfoByGUID` and `RAID_CLASS_COLORS` when the setting is on. About 8 lines in `Core/Scanner.lua`.
-2. Chat that is not a channel: guild and officer chat (guild community streams included), party, raid and instance chat, say and yell, whispers. None is scanned.
+1. Chat that is not a channel: guild and officer chat (guild community streams included), party, raid and instance chat, say and yell, whispers. None is scanned.
    - Leave: no change.
    - Scan them: one event per chat type, and a "chat types" list in the panel next to the channels. A medium feature, about 60 to 100 lines, plus UI space.
-3. Community streams not added to any chat tab. They are no chat channel and never reach the chat events.
+2. Community streams not added to any chat tab. They are no chat channel and never reach the chat events.
    - Leave: no change; the player adds the stream to a chat tab to scan it.
    - Scan them: `CLUB_MESSAGE_ADDED` with `C_Club.GetMessageInfo`, and stream listing from `C_Club.GetSubscribedClubs`/`GetStreams`. A new path of about 50 lines, with its own secret rules to verify.
-4. Channel tag as a link. Blizzard's chat makes the channel tag a `|Hchannel:channel:N|h` link that opens the edit box on that channel (`ChatFrameOverrides.lua:655-658`). ChatScan's tag is plain text.
-   - Keep plain: no change.
-   - Link it: one line in `channelTag`.
 
 ## Next steps
 
@@ -112,8 +107,9 @@ Forever checks:
 - [ ] Untick every channel mid-scan: the status reads "Nothing to match". Tick one again: "Scanning".
 - [ ] Type `WTS` when `wts` is saved: no second row.
 - [ ] A community channel added to a chat tab appears under Scanned Channels with its community and stream name, not `Community:<id>:<id>`.
-- [ ] Tick it, add a keyword, and have a community member post it: the line lands with the channel tag in that channel's colour. Right-click the sender: the community menu opens. Repeat for a Battle.net community.
-- [ ] Change a channel's colour in the chat settings: the next match's tag uses the new colour. The `[Chat Scan]:` prefix is yellow.
+- [ ] Tick it, add a keyword, and have a community member post it: the line lands in that channel's colour with the tag `[N. Community - Stream]`. Right-click the sender: the community menu opens. Repeat for a Battle.net community.
+- [ ] A forwarded line looks like the same message in a Blizzard tab: same `[2. Trade - City]` tag, same colour. Click the tag: the edit box opens on that channel. Right-click it: the channel menu. With "colour names by class" on for that channel the sender is class coloured, with it off the name is in the channel colour.
+- [ ] Change a channel's colour in the chat settings: already forwarded lines from that channel recolour, like Blizzard's. The `[Chat Scan]:` prefix is yellow.
 - [ ] Hover the minimap button and the compartment entry: title, one status line, "Left-click to toggle the panel." and nothing else.
 - [ ] Open the panel in a locked dungeon: community channels show the raw `Community:<id>:<id>` name without errors.
 - [ ] `/reload` resumes the scan. `/cs stop` then `/reload` doesn't. `/cs <kw>`, `start`, `stop` and `clear` all work.
