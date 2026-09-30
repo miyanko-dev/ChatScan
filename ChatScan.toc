@@ -6,6 +6,7 @@
 ## Category: Chat
 ## IconTexture: 134442
 ## SavedVariables: ChatScanDB
+## SavedVariablesPerCharacter: ChatScanCharDB
 ## AddonCompartmentFunc: ChatScan_CompartmentClick
 ## AddonCompartmentFuncOnEnter: ChatScan_CompartmentEnter
 ## AddonCompartmentFuncOnLeave: ChatScan_CompartmentLeave

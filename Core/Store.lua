@@ -5,15 +5,14 @@ ns.Store = Store
 
 local store
 
--- Resolved once at login and cached. UnitName is flagged SecretWhenUnitNameIdentityRestricted on
--- 1.60, so the key is not rebuilt from it on every settings change.
+-- Scan settings are per character (ChatScanCharDB), so the client keeps characters apart instead of
+-- a name key. ChatScanDB holds only what every character shares: the minimap button.
 function Store.Init()
     ChatScanDB = ChatScanDB or {}
     ChatScanDB.minimap = ChatScanDB.minimap or { hide = false, minimapPos = 195 }
 
-    local key = UnitName("player") .. "-" .. GetRealmName()
-    store = ChatScanDB[key] or {}
-    ChatScanDB[key] = store
+    ChatScanCharDB = ChatScanCharDB or {}
+    store = ChatScanCharDB
 
     store.inputChannels = store.inputChannels or {}
     store.outputs = store.outputs or {}

@@ -36,6 +36,7 @@ function Scanner.ReloadKeywords()
         end
         if #terms > 0 then keywordGroups[#keywordGroups + 1] = terms end
     end
+    fireChanged()
 end
 
 local function matchesKeywords(text)
@@ -69,19 +70,21 @@ local function isDuplicate(sender, msg)
     return false
 end
 
--- Chat windows a match may be delivered to, skipping the combat log.
+-- Open chat windows a match may be delivered to, skipping the combat log. A closed tab keeps its
+-- name in GetChatWindowInfo, so only active windows count; a closed pick falls back to the default.
 function Scanner.OutputWindows()
     local windows = {}
     for i = 1, Constants.ChatFrameConstants.MaxChatWindows do
         local name = GetChatWindowInfo(i)
-        if i ~= ns.COMBAT_LOG_INDEX and name and name ~= "" then
+        if i ~= ns.COMBAT_LOG_INDEX and name and name ~= "" and FCF_IsChatWindowIndexActive(i) then
             windows[#windows + 1] = { index = i, name = name, key = strlower(name) }
         end
     end
     return windows
 end
 
--- Falls back to the default chat frame when no output tab is picked, and flashes background tabs.
+-- Falls back to the default chat frame when no output tab is picked. Flashes a tab only while its
+-- frame is hidden, as Blizzard's own chat does.
 local function deliver(line)
     local outputs = ns.Store.Get().outputs
     local delivered = false
@@ -89,7 +92,7 @@ local function deliver(line)
         local frame = _G["ChatFrame" .. window.index]
         if outputs[window.key] and frame then
             frame:AddMessage(line)
-            if frame ~= SELECTED_CHAT_FRAME then FCF_StartAlertFlash(frame) end
+            if not frame:IsShown() then FCF_StartAlertFlash(frame) end
             delivered = true
         end
     end
@@ -130,11 +133,11 @@ local function setChatLocked(locked)
     fireChanged()
 end
 
--- CHAT_MSG_CHANNEL is SecretInChatMessagingLockdown: during lockdown text and playerName arrive as
--- secret values and any string operation on them aborts this handler. channelBaseName, channelIndex,
--- lineID and suppressRaidIcons are NeverSecret, so the channel filter runs first. The lockdown test
--- takes no arguments because issecretvalue rejects secrets from tainted addon code.
-eventFrame:SetScript("OnEvent", function(_, _, ...)
+-- CHAT_MSG_CHANNEL is SecretInChatMessagingLockdown: during lockdown text and playerName may arrive
+-- as secret values that string operations cannot use. channelBaseName, channelIndex, lineID and
+-- suppressRaidIcons are NeverSecret, so the channel filter runs first. Matching relies on the
+-- lockdown check alone; an extra issecretvalue guard on the text waits for an in-game check.
+local function onChannelMessage(...)
     local msg, sender, _, _, _, _, _, channelIndex, channelBaseName, _, lineID, _, _, _, _, _, suppressRaidIcons = ...
     if not ns.Store.Get().inputChannels[ns.channelKey(channelBaseName)] then return end
 
@@ -147,12 +150,31 @@ eventFrame:SetScript("OnEvent", function(_, _, ...)
     if matchesKeywords(msg) and not isDuplicate(sender, msg) then
         showMatch(msg, sender, channelBaseName, channelIndex, lineID, suppressRaidIcons)
     end
+end
+
+-- ADDON_RESTRICTION_STATE_CHANGED fires before a restriction applies and after it lifts, so the
+-- lockdown is re-read a frame later. This keeps the status right in a quiet channel.
+local function refreshLockdown()
+    if Scanner.scanning then setChatLocked(C_ChatInfo.InChatMessagingLockdown()) end
+end
+
+eventFrame:SetScript("OnEvent", function(_, event, ...)
+    if event == "ADDON_RESTRICTION_STATE_CHANGED" then
+        RunNextFrame(refreshLockdown)
+    else
+        onChannelMessage(...)
+    end
 end)
 
 local function countChannels()
     local n = 0
     for _ in pairs(ns.Store.Get().inputChannels) do n = n + 1 end
     return n
+end
+
+-- A running scan left with no keyword group or no channel stays on but can never match.
+function Scanner.CanMatch()
+    return #keywordGroups > 0 and countChannels() > 0
 end
 
 -- Starts from saved settings. A resume after login or reload stays quiet about missing settings.
@@ -173,6 +195,7 @@ local function begin(isResume)
     end
 
     eventFrame:RegisterEvent("CHAT_MSG_CHANNEL")
+    eventFrame:RegisterEvent("ADDON_RESTRICTION_STATE_CHANGED")
     Scanner.scanning = true
     Scanner.matchCount = 0
     store.scanEnabled = true
@@ -193,7 +216,7 @@ function Scanner.Resume()
 end
 
 function Scanner.Stop()
-    eventFrame:UnregisterEvent("CHAT_MSG_CHANNEL")
+    eventFrame:UnregisterAllEvents()
     Scanner.scanning = false
     Scanner.chatLocked = false
     ns.Store.Get().scanEnabled = false

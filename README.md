@@ -14,7 +14,7 @@ Watches the chat channels you pick and forwards any message matching your keywor
 - Zone channels such as General and Trade stay selected when you change zones
 - Minimap button (spyglass) and an Addon Compartment entry
 - A native panel built from the game's own frame art, fonts and controls
-- Settings, scan state and button position saved per character; an active scan resumes after login or `/reload`
+- Settings and scan state saved per character, the minimap button position shared by all characters; an active scan resumes after login or `/reload`
 
 ## Installation
 
@@ -26,13 +26,13 @@ Watches the chat channels you pick and forwards any message matching your keywor
 
 Open the panel with `/cs`, the minimap button or the Addon Compartment, then:
 
-- **Scanned Channels**: tick the channels to watch. The list updates as you join and leave channels.
+- **Scanned Channels**: tick the channels to watch. The list updates as you join and leave channels. Community channels are not listed, because their messages never reach the scan.
 - **Keywords**: type a rule in the trailing empty row and press **Add** or Enter. Commas inside a row require all of those words. Press the **X** to remove a rule.
-- **Output Tabs**: pick the chat tabs that receive matches. With none picked, matches go to the default chat frame.
+- **Output Tabs**: pick the open chat tabs that receive matches. With none picked, or when every picked tab is closed, matches go to the default chat frame.
 - **Alert Sound**: turn the alert on, pick a sound, and **Test** it.
 - **Start**: begins the scan. The button turns red and reads **Stop**, and the status line shows the live match count.
 
-Channel, tab and sound changes apply to a running scan straight away. Escape or the corner X closes the panel; drag it anywhere.
+Channel, tab and sound changes apply to a running scan straight away. If a running scan has no keyword or no channel left, the status line reads **Nothing to match**. Escape or the corner X closes the panel; drag it anywhere.
 
 | Rule | Matches |
 | --- | --- |

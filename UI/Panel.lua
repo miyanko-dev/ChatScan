@@ -84,13 +84,15 @@ local function createCheckList(container, emptyText)
     return list
 end
 
+-- Community channels (Community:<club>:<stream>) arrive on CHAT_MSG_COMMUNITIES_CHANNEL, which the
+-- scan does not read, so they are not offered.
 local function channelEntries()
     local list = { GetChannelList() }
     local entries, seen = {}, {}
     for i = 1, #list, 3 do
         local name = list[i + 1]
         local key = ns.channelKey(name)
-        if not seen[key] then
+        if not seen[key] and not name:find("^Community:") then
             seen[key] = true
             entries[#entries + 1] = { name = name, key = key }
         end
@@ -155,11 +157,13 @@ local function persistKeywords()
     Scanner.ReloadKeywords()
 end
 
+-- A row already saved in any case is not stored twice, the same rule as /cs <keyword>.
 local function commitRow(row)
     local typed = ns.trim(row.editBox:GetText())
     if typed == "" then return end
+    local lower = typed:lower()
     for _, other in ipairs(KeywordRows.active) do
-        if other ~= row and other.saved == typed then
+        if other ~= row and other.saved and other.saved:lower() == lower then
             typed = row.saved
             break
         end
@@ -357,9 +361,12 @@ local function buildPanel()
         if Scanner.scanning then
             startBtn:SetText("Stop")
             tintStart(1, 0.4, 0.4)
-            -- A running scan can be unable to match while the client withholds chat text.
+            -- A running scan can be unable to match while the client withholds chat text, or once
+            -- every keyword or channel is gone.
             if Scanner.chatLocked then
                 status:SetText(WARNING_FONT_COLOR:WrapTextInColorCode("Chat locked by client") .. "  matching paused")
+            elseif not Scanner.CanMatch() then
+                status:SetText(WARNING_FONT_COLOR:WrapTextInColorCode("Nothing to match") .. "  add a keyword and tick a channel")
             else
                 status:SetText(GREEN_FONT_COLOR:WrapTextInColorCode("Scanning") .. "  " .. count)
             end
@@ -394,7 +401,10 @@ local function buildPanel()
         local channels = Store.Get().inputChannels
         channelsH = channelList:Render(channelEntries(),
             function(entry) return channels[entry.key] end,
-            function(entry, checked) channels[entry.key] = checked or nil end)
+            function(entry, checked)
+                channels[entry.key] = checked or nil
+                self:RefreshStatus()
+            end)
         self:Resize()
     end
 

@@ -14,6 +14,8 @@ local function showTooltip(tooltip)
     GameTooltip_SetTitle(tooltip, ns.TITLE)
     if Scanner.scanning and Scanner.chatLocked then
         GameTooltip_AddHighlightLine(tooltip, WARNING_FONT_COLOR:WrapTextInColorCode("Chat locked by client") .. ", matching paused.")
+    elseif Scanner.scanning and not Scanner.CanMatch() then
+        GameTooltip_AddHighlightLine(tooltip, WARNING_FONT_COLOR:WrapTextInColorCode("Nothing to match") .. ", add a keyword and tick a channel.")
     elseif Scanner.scanning then
         GameTooltip_AddHighlightLine(tooltip, GREEN_FONT_COLOR:WrapTextInColorCode("Scanning") .. ", " .. ns.matchLabel(Scanner.matchCount) .. " this session.")
         if Scanner.lastMatchSender then
