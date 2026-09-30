@@ -22,5 +22,4 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Installs subversion itself when .pkgmeta has svn externals.
       - uses: BigWigsMods/packager@v2

@@ -118,8 +118,7 @@ local function createSection(column, title, helperText)
     section.content:SetPoint("TOPLEFT", helper, "BOTTOMLEFT", 0, -GAP)
     section.content:SetPoint("TOPRIGHT", helper, "BOTTOMRIGHT", 0, -GAP)
 
-    -- Height follows the measured text, so each client's font sizes and a long helper never overlap
-    -- the content.
+    -- Height follows the measured text, so a long helper line never overlaps the content.
     function section:Layout(contentHeight)
         self.content:SetHeight(contentHeight)
         self:SetHeight(heading:GetStringHeight() + TEXT_GAP + helper:GetStringHeight() + GAP + contentHeight)
@@ -196,9 +195,7 @@ local function createKeywordRow(parent)
     local addBtn = createButton(row, "Add", ADD_W)
     addBtn:SetPoint("RIGHT")
 
-    -- Sized to the row: Era's close art is 32px and would overlap the next row's button.
     local removeBtn = CreateFrame("Button", nil, row, "UIPanelCloseButtonNoScripts")
-    removeBtn:SetSize(ROW_H, ROW_H)
     removeBtn:SetPoint("RIGHT")
 
     function row:UpdateState()
@@ -271,7 +268,7 @@ local function populateKeywordRows(parent)
 end
 
 -- Two content wells replace the template's single Inset and take its edges, so both follow
--- Blizzard's own margins on each client.
+-- Blizzard's own margins.
 local function createColumn(frame, side)
     local column = CreateFrame("Frame", nil, frame, "InsetFrameTemplate")
     column:SetPoint("TOP" .. side, frame.Inset, "TOP" .. side)
@@ -318,7 +315,7 @@ local function buildPanel()
         Store.Get().playSound = self:GetChecked()
     end)
 
-    -- Only the width is set: each client's dropdown art keeps its own height (24 on Era, 25 on Forever).
+    -- Only the width is set, so the dropdown keeps the template's own height.
     local soundDropdown = CreateFrame("DropdownButton", nil, soundSection.content, "WowStyle1DropdownTemplate")
     soundDropdown:SetWidth(DROPDOWN_W)
     soundDropdown:SetPoint("TOPLEFT", soundCheck, "BOTTOMLEFT", 0, -TEXT_GAP)
