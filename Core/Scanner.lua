@@ -149,10 +149,11 @@ local function isTicked(event, ...)
     return store.inputChannels[ns.channelKey(channelBaseName)]
 end
 
--- Every chat event ChatScan reads is SecretInChatMessagingLockdown with one shared payload:
--- during lockdown text, playerName, playerName2, guid, bnSenderID and discordInfo may arrive as
--- secret values that string operations cannot use. The source filter and Blizzard's letterbox
--- rule use NeverSecret fields only, so they run first and the rest is read outside lockdown.
+-- Every chat event ChatScan reads shares one payload, and all but CHAT_MSG_GUILD_DISCORD are
+-- SecretInChatMessagingLockdown: during lockdown text, playerName, playerName2, guid, bnSenderID
+-- and discordInfo may arrive as secret values that string operations cannot use. The source filter
+-- and Blizzard's letterbox rule use NeverSecret fields only, so they run first and the rest is read
+-- outside lockdown. Guild Discord is gated the same, so one lockdown rule covers every source.
 -- Matching relies on the lockdown check alone; an extra issecretvalue guard on the text waits for
 -- an in-game check.
 local function onChatMessage(event, ...)

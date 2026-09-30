@@ -52,7 +52,7 @@ local function senderLink(event, chatType, chatGroup, ...)
         return communityLink(sender, display, bnSenderID)
     elseif chatType == "BN_WHISPER" then
         return GetBNPlayerLink(sender, display, bnSenderID, lineID, chatGroup, chatTarget)
-    elseif chatType == "GUILD" and isFromDiscord(discordInfo) then
+    elseif (chatType == "GUILD" or chatType == "GUILD_DISCORD") and isFromDiscord(discordInfo) then
         return GetDiscordUserLink(display, bnSenderID, discordInfo.userID, lineID, chatGroup, chatTarget)
     end
     return GetPlayerLink(sender, display, lineID, chatGroup, chatTarget)
@@ -80,14 +80,17 @@ function Lines.Chat(event, ...)
     if isMobile then text = ChatFrameUtil.GetMobileEmbeddedTexture(info.r, info.g, info.b) .. text end
     if isFromDiscord(discordInfo) then text = ChatFrameUtil.FormatDiscordMessage(discordInfo, text) end
 
-    local sender = ChatFrameUtil.GetPFlag(flags, zoneID, channelIndex) .. senderLink(event, chatType, chatGroup, ...)
+    -- Blizzard spaces the Discord flag from a Discord sender in Guild Discord lines only.
+    local pflag = ChatFrameUtil.GetPFlag(flags, zoneID, channelIndex)
+    if chatType == "GUILD_DISCORD" and isFromDiscord(discordInfo) then pflag = pflag .. " " end
+    local sender = pflag .. senderLink(event, chatType, chatGroup, ...)
     local line = channelLink(channelName, channelIndex) .. ChatFrameUtil.GetOutMessageFormatKey(chatType):format(sender) .. text
     return line, info.r, info.g, info.b, info.id
 end
 
 -- The author as Blizzard's Communities chat shows it (CommunitiesChatMixin:FormatMessage): a
 -- Battle.net community link, a class-coloured character link, or the bare name for other clubs.
--- Discord authors only post in guild streams, which ChatScan reads as Guild chat instead.
+-- Discord authors only post in guild streams, which ChatScan reads as Guild or Guild Discord chat.
 local function streamAuthor(clubId, streamId, message)
     local author, id = message.author, message.messageId
     local name = author.name or " "

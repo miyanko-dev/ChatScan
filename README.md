@@ -8,7 +8,7 @@ Watches the chat you pick (channels, community streams, guild, group, nearby cha
 - Route matches to any chat tabs you choose; the receiving tab flashes if you are not looking at it
 - Scan any channel you are in: world and zone channels, custom channels, and community channels added to a chat tab
 - Scan community streams that are in none of your chat tabs
-- Scan guild and officer chat, party, raid (with raid warnings) and instance chat including leader lines, say, yell and emotes, and incoming whispers from characters and Battle.net friends
+- Scan guild, officer and Guild Discord chat, party, raid (with raid warnings) and instance chat including leader lines, say, yell and emotes, and incoming whispers from characters and Battle.net friends
 - Forwarded lines look like the game's own: the chat's colour, its tag (the numbered channel, `[Guild]`, `[Party Leader]`, "whispers:" and so on), and the sender in class colour when your chat settings colour names by class. Each line is stamped with its time
 - Click the sender's name to whisper, right-click for the usual player menu; click the channel or group tag to talk there, right-click it for its menu
 - Matches deduplicated for 10 seconds, so the same line never repeats

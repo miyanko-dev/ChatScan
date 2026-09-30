@@ -35,6 +35,7 @@ ns.CHAT_GROUPS = {
     { title = "Guild", types = {
         { key = "guild", label = GUILD_CHAT, events = { "CHAT_MSG_GUILD" } },
         { key = "officer", label = OFFICER_CHAT, events = { "CHAT_MSG_OFFICER" } },
+        { key = "guilddiscord", label = GUILD_DISCORD_CHAT, events = { "CHAT_MSG_GUILD_DISCORD" } },
     } },
     { title = "Group", types = {
         { key = "party", label = PARTY, events = { "CHAT_MSG_PARTY", "CHAT_MSG_PARTY_LEADER" } },
