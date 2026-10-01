@@ -37,7 +37,7 @@ Open the panel with `/cs`, the minimap button or the Addon Compartment, then:
 - **Alert Sound**: turn the alert on, pick a sound, and **Test** it.
 - **Start**: begins the scan. The button then reads **Stop**, and the status line under the title shows **Scanning** with the live match count.
 
-Channel, chat type, tab and sound changes apply to a running scan straight away. If a running scan has no keyword or nothing ticked left, the status line reads **Nothing to match**. Escape or the corner X closes the panel; drag it anywhere.
+Channel, chat type, tab and sound changes apply to a running scan straight away. If a running scan has no keyword or nothing ticked left, the status line reads **Nothing to match**. Escape or the corner X closes the panel; drag it anywhere. The panel keeps its size: when a column holds more than fits, scroll it with the mouse wheel or its scroll bar.
 
 Your own messages are forwarded too, in channels, community streams and every chat type, on purpose: it lets you test your rules in game on your own. Whether to skip them is a later decision.
 

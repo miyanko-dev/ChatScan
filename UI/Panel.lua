@@ -4,16 +4,22 @@ local UI = LibStub("LibNativeUI-1.0")
 local Scanner = ns.Scanner
 local Store = ns.Store
 
--- Two equal wells side by side, one gap apart, inside the template's own inset margins. A well is
--- wide enough for the 12px helper lines and for two chat type blocks side by side.
-local COLUMN_W = 40 * UI.GRID
+-- Two equal wells side by side, one gap apart, inside the template's own inset margins. A well
+-- leaves 288px of content beside its scroll gutter: room for the 12px helper lines and for two chat
+-- type blocks of 144px.
+local COLUMN_W = 41 * UI.GRID
 local PANEL_W = PANEL_INSET_LEFT_OFFSET + 2 * COLUMN_W + UI.Space.gap - PANEL_INSET_RIGHT_OFFSET
 
--- The template's attic and button bar, above and below the wells.
-local CHROME_H = -PANEL_INSET_ATTIC_OFFSET + PANEL_INSET_BOTTOM_BUTTON_OFFSET
+-- A fixed height that leaves room on a 768px-tall UI; the wells scroll instead of the window
+-- growing with its lists.
+local PANEL_H = 75 * UI.GRID
+
+-- Each well's scroll area sits one padding in from its top, left and bottom and leaves the scroll
+-- bar's gutter free on the right, so the bar stays inside the inset.
+local CONTENT_W = COLUMN_W - UI.Space.padding - UI.ScrollGutter()
 
 -- Two chat type blocks share a row of the Chat Types section.
-local BLOCK_W = (COLUMN_W - 2 * UI.Space.padding) / 2
+local BLOCK_W = CONTENT_W / 2
 
 local ADD_W = 7 * UI.GRID
 local TEST_W = 8 * UI.GRID
@@ -165,25 +171,40 @@ local function createSection(column, title, helperText)
     return section
 end
 
--- Chains sections down a well from its padded top, one section break apart.
+-- One scroll area per well, placed like QuestieGuide's list. ScrollFrameTemplate brings
+-- MinimalScrollBar and its wheel handler; the ticks, boxes and buttons inside never take the wheel,
+-- so it scrolls over the content too. The bar hides while everything fits.
+local function createWellScroll(well)
+    local scroll = UI.CreateScroll(well)
+    scroll.ScrollBar:SetHideIfUnscrollable(true)
+    scroll:SetPoint("TOPLEFT", UI.Space.padding, -UI.Space.padding)
+    scroll:SetPoint("BOTTOMRIGHT", -UI.ScrollGutter(), UI.Space.padding)
+    scroll.content:SetWidth(CONTENT_W)
+    return scroll
+end
+
+-- Chains sections down a scroll child from its top, one section break apart.
 local function stackSections(sections)
     for i, section in ipairs(sections) do
         if i == 1 then
-            section:SetPoint("TOPLEFT", UI.Space.padding, -UI.Space.padding)
-            section:SetPoint("TOPRIGHT", -UI.Space.padding, -UI.Space.padding)
+            section:SetPoint("TOPLEFT")
+            section:SetPoint("TOPRIGHT")
         else
             UI.StackBelow(section, sections[i - 1])
         end
     end
 end
 
--- The height a well needs for its laid-out sections and its padding.
-local function columnHeight(sections)
-    local height = 2 * UI.Space.padding + (#sections - 1) * UI.Space.section
+-- Sizes the scroll child to its laid-out sections, and pulls the offset back into range when a
+-- list got shorter.
+local function fitScroll(scroll, sections)
+    local height = (#sections - 1) * UI.Space.section
     for _, section in ipairs(sections) do
         height = height + section:GetHeight()
     end
-    return height
+    scroll.content:SetHeight(height)
+    scroll:UpdateScrollChildRect()
+    scroll:SetVerticalScroll(math.min(scroll:GetVerticalScroll(), scroll:GetVerticalScrollRange()))
 end
 
 -- Keyword rows mirror the slash command: one row is an OR group, commas inside it are AND terms.
@@ -372,24 +393,24 @@ local LIST_EVENTS = {
 }
 
 local function buildPanel()
-    -- The window starts at its empty height; Resize grows it with the content on every show.
     local frame = UI.CreateWindow({
         name = "ChatScanFrame", title = ns.TITLE, icon = ns.ICON,
-        width = PANEL_W, height = CHROME_H,
+        width = PANEL_W, height = PANEL_H,
     })
     local left, right = createColumns(frame)
+    local leftScroll, rightScroll = createWellScroll(left), createWellScroll(right)
 
-    local channelsSection = createSection(left, "Scanned Channels",
+    local channelsSection = createSection(leftScroll.content, "Scanned Channels",
         "Pick which chat channels to scan. Zone channels stay selected when you change zones.")
-    local streamsSection = createSection(left, "Community Streams",
+    local streamsSection = createSection(leftScroll.content, "Community Streams",
         "Community streams that are in none of your chat tabs. A stream in a chat tab is listed under Scanned Channels.")
-    local keywordsSection = createSection(left, "Keywords",
+    local keywordsSection = createSection(leftScroll.content, "Keywords",
         "Each row matches on its own (OR). Separate keywords in one row with commas to require all of them (AND). Press Enter or Add to save a row.")
-    local chatTypesSection = createSection(right, "Chat Types",
+    local chatTypesSection = createSection(rightScroll.content, "Chat Types",
         "Pick which chat outside the channels to scan.")
-    local outputsSection = createSection(right, "Output Tabs",
+    local outputsSection = createSection(rightScroll.content, "Output Tabs",
         "Pick which chat tabs receive matches. With none selected, matches go to the default chat frame.")
-    local soundSection = createSection(right, "Alert Sound",
+    local soundSection = createSection(rightScroll.content, "Alert Sound",
         "Play a sound when a keyword matches, at most once every 3 seconds.")
     local leftSections = { channelsSection, streamsSection, keywordsSection }
     local rightSections = { chatTypesSection, outputsSection, soundSection }
@@ -437,15 +458,16 @@ local function buildPanel()
 
     local channelsH, streamsH, keywordsH, outputsH = UI.Size.row, UI.Size.row, UI.Size.row, UI.Size.row
 
-    -- The window grows with its content: the attic, the taller well and the button bar.
-    function frame:Resize()
+    -- The window keeps its height; each well's scroll child follows its re-rendered lists.
+    function frame:LayoutWells()
         channelsSection:Layout(channelsH)
         streamsSection:Layout(streamsH)
         keywordsSection:Layout(keywordsH)
         chatTypesSection:Layout(chatTypesH)
         outputsSection:Layout(outputsH)
         soundSection:Layout(soundH)
-        self:SetHeight(CHROME_H + math.max(columnHeight(leftSections), columnHeight(rightSections)))
+        fitScroll(leftScroll, leftSections)
+        fitScroll(rightScroll, rightSections)
     end
 
     -- Channels and community streams render together, because a stream moves from one list to the
@@ -463,7 +485,7 @@ local function buildPanel()
         local locked = C_ChatInfo.InChatMessagingLockdown()
         streamList:SetEmptyText(locked and "Hidden while chat is locked" or "No other community streams")
         streamsH = streamList:Render(locked and {} or streamEntries(), isChecked, onClick)
-        self:Resize()
+        self:LayoutWells()
     end
 
     function frame:RefreshChatTypes()
@@ -476,12 +498,12 @@ local function buildPanel()
         outputsH = outputList:Render(Scanner.OutputWindows(),
             function(entry) return outputs[entry.key] end,
             function(entry, checked) outputs[entry.key] = checked or nil end)
-        self:Resize()
+        self:LayoutWells()
     end
 
     function frame:RefreshKeywords()
         keywordsH = layoutKeywordRows(keywordsSection.content)
-        self:Resize()
+        self:LayoutWells()
     end
 
     function frame:PopulateKeywords()
@@ -499,6 +521,12 @@ local function buildPanel()
         self:PopulateKeywords()
         self:RefreshStatus()
         FrameUtil.RegisterFrameForEvents(self, LIST_EVENTS)
+
+        -- The helper lines wrap to widths the scroll child's sections only have after their first
+        -- layout, so the wells are measured once more a frame later, as QuestieGuide does.
+        RunNextFrame(function()
+            if self:IsShown() then self:LayoutWells() end
+        end)
     end)
     frame:SetScript("OnHide", function(self)
         self:UnregisterAllEvents()
