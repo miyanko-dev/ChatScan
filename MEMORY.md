@@ -140,3 +140,7 @@ Forever checks:
 ## LibNativeUI-1.0 version
 
 - The embedded copy is MINOR 2, byte-identical in ChatScan, QuestieGuide and TargetFinder; this is the reference copy. MINOR 2 moves `UI.CreateSearchBox`'s typed text and hint from the template's 10px fonts to the 12px body and muted roles, keeping the template's hint grey.
+
+## Minimap icon (owner decision 2026-10-01)
+
+- Keep the draggable LibDBIcon minimap icon. It is built by LibNativeUI's `UI.CreateLauncher`, which also adds the entry in Blizzard's addon menu (Addon Compartment) through LibDBIcon, so both share one click handler and tooltip. LibDBIcon, LibDataBroker and CallbackHandler stay embedded.
