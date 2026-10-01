@@ -134,3 +134,7 @@ Forever checks:
 - [ ] Check `/dump C_ChatInfo.InChatMessagingLockdown()` in the open world, a city, a dungeon, a battleground and during an encounter. This settles issue 1.
 - [ ] In a locked dungeon: `/run local f=CreateFrame("Frame") f:RegisterEvent("CHAT_MSG_CHANNEL") f:SetScript("OnEvent",function(_,_,m) print(pcall(issecretvalue,m)) end)`, then wait for a channel message. This decides the optional CS-7 guard.
 - [ ] Mute SFX with Master on and record whether the alert plays.
+
+## LibNativeUI-1.0 version
+
+- The embedded copy is MINOR 2, byte-identical in ChatScan, QuestieGuide and TargetFinder; this is the reference copy. MINOR 2 moves `UI.CreateSearchBox`'s typed text and hint from the template's 10px fonts to the 12px body and muted roles, keeping the template's hint grey.
