@@ -7,14 +7,12 @@
 ## IconTexture: 134442
 ## SavedVariables: ChatScanDB
 ## SavedVariablesPerCharacter: ChatScanCharDB
-## AddonCompartmentFunc: ChatScan_CompartmentClick
-## AddonCompartmentFuncOnEnter: ChatScan_CompartmentEnter
-## AddonCompartmentFuncOnLeave: ChatScan_CompartmentLeave
 
 Libs\LibStub\LibStub.lua
 Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
 Libs\LibDataBroker-1.1\LibDataBroker-1.1.lua
 Libs\LibDBIcon-1.0\LibDBIcon-1.0.lua
+Libs\LibNativeUI-1.0\LibNativeUI-1.0.lua
 
 Core\Init.lua
 Core\Store.lua

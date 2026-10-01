@@ -1,13 +1,8 @@
-local ADDON_NAME, ns = ...
+local _, ns = ...
 
-ns.name = ADDON_NAME
-
--- Spaced name for everything the player reads. ns.name stays unspaced because it is the
--- addon folder and the LibDBIcon registry key, neither of which may change.
+-- Spaced name for everything the player reads: the window title, the chat prefix and the
+-- launcher, whose LibDataBroker name it also is.
 ns.TITLE = "Chat Scan"
-
--- The chat prefix every addon of this set shares.
-ns.PREFIX = YELLOW_FONT_COLOR:WrapTextInColorCode("[" .. ns.TITLE .. "]:") .. " "
 
 -- interface/icons/inv_misc_spyglass_03.blp, the same file id as the toc's IconTexture.
 ns.ICON = 134442
@@ -56,10 +51,6 @@ ns.CHAT_GROUPS = {
 
 -- ChatFrame2 is always reset and docked as the combat log, so it never receives forwarded lines.
 ns.COMBAT_LOG_INDEX = 2
-
-function ns.notify(msg)
-    DEFAULT_CHAT_FRAME:AddMessage(ns.PREFIX .. msg)
-end
 
 function ns.matchLabel(count)
     return string.format("%d match%s", count, count == 1 and "" or "es")

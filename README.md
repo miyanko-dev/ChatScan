@@ -15,8 +15,8 @@ Watches the chat you pick (channels, community streams, guild, group, nearby cha
 - Optional alert sound with preview, throttled to once every 3 seconds
 - Raid-target markers like `{star}` and `{skull}` rendered as icons, exactly as the game's own chat does
 - Zone channels such as General and Trade stay selected when you change zones
-- Minimap button (spyglass) and an Addon Compartment entry
-- A native panel built from the game's own frame art, fonts and controls
+- Minimap button (spyglass) and an Addon Compartment entry, sharing one tooltip; left-click either to toggle the panel
+- A native panel built from the game's own frame art, fonts and controls, on the shared LibNativeUI-1.0 design system (8 px spacing grid, 12 px text)
 - Settings and scan state saved per character, the minimap button position shared by all characters; an active scan resumes after login or `/reload`
 
 ## Installation

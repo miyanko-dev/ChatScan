@@ -1,50 +1,39 @@
 local _, ns = ...
 
+local UI = LibStub("LibNativeUI-1.0")
+
 -- One short line on the scan state, in the colours of the panel's status line.
 local function statusLine()
     local Scanner = ns.Scanner
     if not Scanner.scanning then
-        return GRAY_FONT_COLOR:WrapTextInColorCode("Not scanning")
+        return UI.Color.muted:WrapTextInColorCode("Not scanning")
     elseif Scanner.chatLocked then
-        return WARNING_FONT_COLOR:WrapTextInColorCode("Chat locked by client")
+        return UI.Color.warn:WrapTextInColorCode("Chat locked by client")
     elseif not Scanner.CanMatch() then
-        return WARNING_FONT_COLOR:WrapTextInColorCode("Nothing to match")
+        return UI.Color.warn:WrapTextInColorCode("Nothing to match")
     end
-    return GREEN_FONT_COLOR:WrapTextInColorCode("Scanning") .. ", " .. ns.matchLabel(Scanner.matchCount)
+    return UI.Color.good:WrapTextInColorCode("Scanning") .. ", " .. ns.matchLabel(Scanner.matchCount)
 end
 
--- Written with Blizzard's tooltip line helpers so the colours match every native tooltip.
-local function showTooltip(tooltip)
-    GameTooltip_SetTitle(tooltip, ns.TITLE)
+-- The lines under the launcher's title, written with Blizzard's tooltip line helpers so the colours
+-- match every native tooltip.
+local function fillTooltip(tooltip)
     GameTooltip_AddHighlightLine(tooltip, statusLine())
     GameTooltip_AddInstructionLine(tooltip, "Left-click to toggle the panel.")
 end
 
-function ns.SetupMinimapButton()
-    local dataObject = LibStub("LibDataBroker-1.1"):NewDataObject(ns.name, {
-        type = "launcher",
-        text = ns.TITLE,
+local function onClick(button)
+    if button == "LeftButton" then ns.TogglePanel() end
+end
+
+-- The minimap button and the addon menu entry share this click and tooltip. The minimap position
+-- lives in the account-wide db table, so it survives the rename of the launcher.
+function ns.SetupLauncher()
+    UI.CreateLauncher({
+        title = ns.TITLE,
         icon = ns.ICON,
-        OnClick = function(_, button)
-            if button == "LeftButton" then ns.TogglePanel() end
-        end,
-        OnTooltipShow = showTooltip,
+        db = ns.Store.Minimap(),
+        onClick = onClick,
+        tooltip = fillTooltip,
     })
-    LibStub("LibDBIcon-1.0"):Register(ns.name, dataObject, ns.Store.Minimap())
-end
-
--- The toc names these three globals for the Addon Compartment, which calls them with the addon name
--- first.
-function ChatScan_CompartmentClick()
-    ns.TogglePanel()
-end
-
-function ChatScan_CompartmentEnter(_, menuButton)
-    GameTooltip:SetOwner(menuButton, "ANCHOR_LEFT")
-    showTooltip(GameTooltip)
-    GameTooltip:Show()
-end
-
-function ChatScan_CompartmentLeave()
-    GameTooltip:Hide()
 end

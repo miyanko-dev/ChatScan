@@ -1,66 +1,34 @@
 local _, ns = ...
 
+local UI = LibStub("LibNativeUI-1.0")
 local Scanner = ns.Scanner
 local Store = ns.Store
 
--- One list row: checkboxes shrink from the template's 32px to the 24px of the close button that
--- removes a keyword row. INPUT_H is the height of InputBoxTemplate's border art.
-local ROW_H = 24
-local INPUT_H = 20
+-- Two equal wells side by side, one gap apart, inside the template's own inset margins. A well is
+-- wide enough for the 12px helper lines and for two chat type blocks side by side.
+local COLUMN_W = 40 * UI.GRID
+local PANEL_W = PANEL_INSET_LEFT_OFFSET + 2 * COLUMN_W + UI.Space.gap - PANEL_INSET_RIGHT_OFFSET
 
--- Two equal content wells side by side, inside the template's own inset margins.
-local PANEL_W = 616
-local COLUMN_GAP = 4
-local COLUMN_W = (PANEL_W - PANEL_INSET_LEFT_OFFSET + PANEL_INSET_RIGHT_OFFSET - COLUMN_GAP) / 2
+-- The template's attic and button bar, above and below the wells.
+local CHROME_H = -PANEL_INSET_ATTIC_OFFSET + PANEL_INSET_BOTTOM_BUTTON_OFFSET
 
--- Padding inside a content well, the gap under a heading, the gap between controls, and the gap
--- between sections.
-local PAD = 12
-local TEXT_GAP = 4
-local GAP = 8
-local SECTION_GAP = 16
+-- Two chat type blocks share a row of the Chat Types section.
+local BLOCK_W = (COLUMN_W - 2 * UI.Space.padding) / 2
 
--- Two chat type groups share a row of the Chat Types section.
-local GRID_W = (COLUMN_W - 2 * PAD) / 2
-
-local DROPDOWN_W = 160
-local ADD_W = 56
-local TEST_W = 64
-
--- InputBoxTemplate draws its left border 5px outside the edit box, so the box sits in a little to
--- line the visible border up with the checkbox art above it.
-local INPUT_INSET = 8
-local KEYWORD_GAP = 4
+local ADD_W = 7 * UI.GRID
+local TEST_W = 8 * UI.GRID
 
 local panel
-
-local function createText(parent, font)
-    local text = parent:CreateFontString(nil, "ARTWORK")
-    text:SetFontObject(font)
-    text:SetJustifyH("LEFT")
-    return text
-end
-
-local function createButton(parent, label, width)
-    local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-    button:SetWidth(width)
-    button:SetText(label)
-    return button
-end
-
--- The box shrinks to the row; the label keeps the template's own anchor beside it.
-local function createCheckbox(parent)
-    local checkbox = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
-    checkbox:SetSize(ROW_H, ROW_H)
-    checkbox.Text:SetFontObject(GameFontHighlight)
-    return checkbox
-end
 
 -- A checkbox list with a pool, so channel joins and tab changes never leak frames.
 local function createCheckList(container, emptyText)
     local list = { active = {}, pool = {} }
-    local empty = createText(container, GameFontDisableSmall)
-    empty:SetPoint("LEFT", container, "TOPLEFT", 0, -ROW_H / 2)
+
+    -- The empty note fills the first row, so an empty list keeps the height of one entry.
+    local empty = UI.CreateText(container, "muted")
+    empty:SetPoint("TOPLEFT")
+    empty:SetPoint("TOPRIGHT")
+    empty:SetHeight(UI.Size.row)
     empty:SetText(emptyText)
 
     function list:SetEmptyText(text)
@@ -77,15 +45,15 @@ local function createCheckList(container, emptyText)
         empty:SetShown(#entries == 0)
 
         for i, entry in ipairs(entries) do
-            local checkbox = table.remove(self.pool) or createCheckbox(container)
-            checkbox:SetPoint("TOPLEFT", container, "TOPLEFT", 0, -(i - 1) * ROW_H)
+            local checkbox = table.remove(self.pool) or UI.CreateCheckbox(container)
+            checkbox:SetPoint("TOPLEFT", container, "TOPLEFT", 0, -(i - 1) * UI.Size.row)
             checkbox.Text:SetText(entry.name)
             checkbox:SetChecked(isChecked(entry))
             checkbox:SetScript("OnClick", function(self) onClick(entry, self:GetChecked()) end)
             checkbox:Show()
             self.active[i] = checkbox
         end
-        return math.max(#entries, 1) * ROW_H
+        return math.max(#entries, 1) * UI.Size.row
     end
 
     return list
@@ -142,77 +110,80 @@ local function streamEntries()
     return entries
 end
 
--- The chat type ticks, one titled block per CHAT_GROUPS group, two blocks side by side. Returns the
--- checkboxes by key and the height used.
+-- The chat type ticks, one titled block per CHAT_GROUPS group, two blocks side by side. A block has
+-- a white heading line one gap above its ticks, and block rows sit one section break apart, so each
+-- title reads as part of its own group. Returns the checkboxes by key and the height used.
 local function createChatTypeGrid(content, onClick)
     local checks, top, rowH = {}, 0, 0
     for i, group in ipairs(ns.CHAT_GROUPS) do
         local column = (i - 1) % 2
         if column == 0 and i > 1 then
-            top = top + rowH + GAP
+            top = top + rowH + UI.Space.section
             rowH = 0
         end
-        local x = column * GRID_W
+        local x = column * BLOCK_W
 
-        local title = createText(content, GameFontHighlightSmall)
+        local title = UI.CreateText(content, "body")
+        title:SetHeight(UI.Size.heading)
         title:SetPoint("TOPLEFT", x, -top)
         title:SetText(group.title)
-        local titleH = title:GetStringHeight() + TEXT_GAP
+        local ticksTop = top + UI.Size.heading + UI.Space.gap
 
         for j, chatType in ipairs(group.types) do
-            local checkbox = createCheckbox(content)
-            checkbox:SetPoint("TOPLEFT", x, -(top + titleH + (j - 1) * ROW_H))
-            checkbox.Text:SetText(chatType.label)
+            local checkbox = UI.CreateCheckbox(content, chatType.label)
+            checkbox:SetPoint("TOPLEFT", x, -(ticksTop + (j - 1) * UI.Size.row))
             checkbox:SetScript("OnClick", function(self) onClick(chatType.key, self:GetChecked()) end)
             checks[chatType.key] = checkbox
         end
-        rowH = math.max(rowH, titleH + #group.types * ROW_H)
+        rowH = math.max(rowH, ticksTop - top + #group.types * UI.Size.row)
     end
     return checks, top + rowH
 end
 
--- A heading, a grey helper line and a content frame. Only TOP* anchors, so every frame has one
--- vertical constraint; the helper's two anchors give it the width it needs to measure its wrap.
+-- A library section whose body holds a muted helper line and, one gap below it, the section's own
+-- content. The helper's two anchors give it the width it needs to measure its wrap.
 local function createSection(column, title, helperText)
-    local section = CreateFrame("Frame", nil, column)
-    section:SetPoint("TOPLEFT", PAD, -PAD)
-    section:SetPoint("TOPRIGHT", -PAD, -PAD)
+    local section = UI.CreateSection(column, title)
 
-    local heading = createText(section, GameFontNormal)
-    heading:SetPoint("TOPLEFT")
-    heading:SetText(title)
-
-    local helper = createText(section, GameFontDisableSmall)
-    helper:SetPoint("TOPLEFT", heading, "BOTTOMLEFT", 0, -TEXT_GAP)
-    helper:SetPoint("TOPRIGHT", 0, 0)
+    local helper = UI.CreateText(section.body, "muted")
+    helper:SetPoint("TOPLEFT")
+    helper:SetPoint("TOPRIGHT")
     helper:SetText(helperText)
 
-    section.content = CreateFrame("Frame", nil, section)
-    section.content:SetPoint("TOPLEFT", helper, "BOTTOMLEFT", 0, -GAP)
-    section.content:SetPoint("TOPRIGHT", helper, "BOTTOMRIGHT", 0, -GAP)
+    section.content = CreateFrame("Frame", nil, section.body)
 
-    -- Height follows the measured text, so a long helper line never overlaps the content.
+    -- The helper's wrapped height is snapped, so the content starts on the grid and a long helper
+    -- line never overlaps it.
     function section:Layout(contentHeight)
+        local offset = UI.Snap(helper:GetStringHeight()) + UI.Space.gap
+        self.content:SetPoint("TOPLEFT", self.body, "TOPLEFT", 0, -offset)
+        self.content:SetPoint("TOPRIGHT", self.body, "TOPRIGHT", 0, -offset)
         self.content:SetHeight(contentHeight)
-        self:SetHeight(heading:GetStringHeight() + TEXT_GAP + helper:GetStringHeight() + GAP + contentHeight)
+        self:SetBodyHeight(offset + contentHeight)
     end
 
     return section
 end
 
--- Stacks laid-out sections in a column and returns the height the column needs.
-local function stackSections(column, sections)
-    local height = PAD
+-- Chains sections down a well from its padded top, one section break apart.
+local function stackSections(sections)
     for i, section in ipairs(sections) do
-        if i > 1 then
-            height = height + SECTION_GAP
-            section:ClearAllPoints()
-            section:SetPoint("TOPLEFT", sections[i - 1], "BOTTOMLEFT", 0, -SECTION_GAP)
-            section:SetPoint("TOPRIGHT", sections[i - 1], "BOTTOMRIGHT", 0, -SECTION_GAP)
+        if i == 1 then
+            section:SetPoint("TOPLEFT", UI.Space.padding, -UI.Space.padding)
+            section:SetPoint("TOPRIGHT", -UI.Space.padding, -UI.Space.padding)
+        else
+            UI.StackBelow(section, sections[i - 1])
         end
+    end
+end
+
+-- The height a well needs for its laid-out sections and its padding.
+local function columnHeight(sections)
+    local height = 2 * UI.Space.padding + (#sections - 1) * UI.Space.section
+    for _, section in ipairs(sections) do
         height = height + section:GetHeight()
     end
-    return height + PAD
+    return height
 end
 
 -- Keyword rows mirror the slash command: one row is an OR group, commas inside it are AND terms.
@@ -259,18 +230,16 @@ end
 -- An empty row shows no button, a typed row shows Add, a saved and unchanged row shows remove.
 local function createKeywordRow(parent)
     local row = CreateFrame("Frame", nil, parent)
-    row:SetHeight(ROW_H)
+    row:SetHeight(UI.Size.row)
 
-    local editBox = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
-    editBox:SetAutoFocus(false)
+    local editBox = UI.CreateEditBox(row)
     editBox:SetMaxLetters(256)
-    editBox:SetHeight(INPUT_H)
     row.editBox = editBox
 
-    local addBtn = createButton(row, "Add", ADD_W)
+    local addBtn = UI.CreateButton(row, "Add", ADD_W)
     addBtn:SetPoint("RIGHT")
 
-    local removeBtn = CreateFrame("Button", nil, row, "UIPanelCloseButtonNoScripts")
+    local removeBtn = UI.CreateRemoveButton(row)
     removeBtn:SetPoint("RIGHT")
 
     function row:UpdateState()
@@ -280,12 +249,13 @@ local function createKeywordRow(parent)
         addBtn:SetShown(isTyped)
         removeBtn:SetShown(isSaved)
 
+        -- The box sits in by the template's left cap, so its visible border lines up with the column.
         editBox:ClearAllPoints()
-        editBox:SetPoint("LEFT", INPUT_INSET, 0)
+        editBox:SetPoint("LEFT", UI.Native.inputArt, 0)
         if isSaved then
-            editBox:SetPoint("RIGHT", removeBtn, "LEFT", -GAP, 0)
+            editBox:SetPoint("RIGHT", removeBtn, "LEFT", -UI.Space.gap, 0)
         elseif isTyped then
-            editBox:SetPoint("RIGHT", addBtn, "LEFT", -GAP, 0)
+            editBox:SetPoint("RIGHT", addBtn, "LEFT", -UI.Space.gap, 0)
         else
             editBox:SetPoint("RIGHT")
         end
@@ -316,18 +286,18 @@ local function addKeywordRow(parent, keyword)
     KeywordRows.active[#KeywordRows.active + 1] = row
 end
 
--- Keeps one empty row at the end, lays rows out top-down and returns the height used.
+-- Keeps one empty row at the end, lays rows out top-down one gap apart and returns the height used.
 local function layoutKeywordRows(parent)
     local last = KeywordRows.active[#KeywordRows.active]
     if not last or last.saved then addKeywordRow(parent, nil) end
 
+    local pitch = UI.Size.row + UI.Space.gap
     for i, row in ipairs(KeywordRows.active) do
-        local y = -(i - 1) * (ROW_H + KEYWORD_GAP)
+        local y = -(i - 1) * pitch
         row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, y)
         row:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, y)
     end
-    local count = #KeywordRows.active
-    return count * ROW_H + (count - 1) * KEYWORD_GAP
+    return #KeywordRows.active * pitch - UI.Space.gap
 end
 
 local function populateKeywordRows(parent)
@@ -342,53 +312,29 @@ local function populateKeywordRows(parent)
     end
 end
 
--- A ButtonFrameTemplate tool window with the addon icon as portrait, moved by dragging and closed
--- with Escape.
-local function createWindow()
-    local frame = CreateFrame("Frame", "ChatScanFrame", UIParent, "ButtonFrameTemplate")
-    frame:SetWidth(PANEL_W)
-    frame:SetPoint("CENTER")
-    frame:SetFrameStrata("HIGH")
-    frame:SetToplevel(true)
-    frame:SetClampedToScreen(true)
-    frame:SetMovable(true)
-    frame:EnableMouse(true)
-    frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", frame.StartMoving)
-    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-    frame:SetTitle(ns.TITLE)
-    frame:SetPortraitToAsset(ns.ICON)
-    tinsert(UISpecialFrames, frame:GetName())
-    frame:Hide()
-    return frame
-end
-
--- The template's Inset becomes the left well and a second InsetFrameTemplate the right one, both on
--- Blizzard's own inset offsets.
+-- The template's Inset becomes the left well and a second inset the right one, one gap apart and
+-- both on Blizzard's own inset offsets.
 local function createColumns(frame)
     local left = frame.Inset
     left:SetPoint("BOTTOMRIGHT", frame, "BOTTOMLEFT", PANEL_INSET_LEFT_OFFSET + COLUMN_W, PANEL_INSET_BOTTOM_BUTTON_OFFSET)
 
-    local right = CreateFrame("Frame", nil, frame, "InsetFrameTemplate")
-    right:SetPoint("TOPLEFT", left, "TOPRIGHT", COLUMN_GAP, 0)
+    local right = UI.CreateInset(frame)
+    right:SetPoint("TOPLEFT", left, "TOPRIGHT", UI.Space.gap, 0)
     right:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", PANEL_INSET_RIGHT_OFFSET, PANEL_INSET_BOTTOM_BUTTON_OFFSET)
     return left, right
 end
 
--- The alert toggle, a named sound picker that previews each pick, and a Test button. Returns the
--- toggle, the picker and the height they use.
+-- The alert toggle, a sound picker that previews each pick, and a Test button. Returns the toggle,
+-- the picker and the height they use.
 local function createSoundControls(content)
-    local soundCheck = createCheckbox(content)
+    local soundCheck = UI.CreateCheckbox(content, "Play sound on match")
     soundCheck:SetPoint("TOPLEFT")
-    soundCheck.Text:SetText("Play sound on match")
     soundCheck:SetScript("OnClick", function(self)
         Store.Get().playSound = self:GetChecked()
     end)
 
-    -- Only the width is set, so the dropdown keeps the template's own height.
-    local soundDropdown = CreateFrame("DropdownButton", nil, content, "WowStyle1DropdownTemplate")
-    soundDropdown:SetWidth(DROPDOWN_W)
-    soundDropdown:SetPoint("TOPLEFT", soundCheck, "BOTTOMLEFT", 0, -TEXT_GAP)
+    local soundDropdown = UI.CreateDropdown(content)
+    soundDropdown:SetPoint("TOPLEFT", soundCheck, "BOTTOMLEFT", 0, -UI.Space.gap)
     soundDropdown:SetDefaultText("Choose a sound")
     soundDropdown:SetupMenu(function(_, root)
         for _, sound in ipairs(ns.SOUNDS) do
@@ -401,32 +347,21 @@ local function createSoundControls(content)
         end
     end)
 
-    local testBtn = createButton(content, "Test", TEST_W)
-    testBtn:SetPoint("LEFT", soundDropdown, "RIGHT", GAP, 0)
+    local testBtn = UI.CreateButton(content, "Test", TEST_W)
+    testBtn:SetPoint("LEFT", soundDropdown, "RIGHT", UI.Space.gap, 0)
     testBtn:SetScript("OnClick", function() PlaySound(Store.Get().soundId) end)
 
-    return soundCheck, soundDropdown, ROW_H + TEXT_GAP + soundDropdown:GetHeight()
+    -- The dropdown keeps the template's own height, so its slot is snapped to the grid.
+    return soundCheck, soundDropdown, UI.Size.row + UI.Space.gap + UI.Snap(soundDropdown:GetHeight())
 end
 
 -- The live status sits in the attic, right of the portrait and centred between title bar and wells.
 local function createStatusLine(frame, right)
-    local status = createText(frame, GameFontHighlight)
+    local status = UI.CreateText(frame, "body")
     status:SetPoint("TOPLEFT", frame.TitleContainer, "BOTTOMLEFT")
     status:SetPoint("BOTTOMRIGHT", right, "TOPRIGHT")
     status:SetJustifyV("MIDDLE")
     return status
-end
-
--- The primary action in the button bar's bottom-right corner. MagicButton_OnLoad turns the zero
--- offsets into Blizzard's corner offsets, so it runs once the anchor exists.
-local function createStartButton(frame)
-    local startBtn = CreateFrame("Button", nil, frame, "MagicButtonTemplate")
-    startBtn:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT")
-    MagicButton_OnLoad(startBtn)
-    startBtn:SetScript("OnClick", function()
-        if Scanner.scanning then Scanner.Stop() else Scanner.Start() end
-    end)
-    return startBtn
 end
 
 -- Events that change the channel or community stream lists while the panel is open.
@@ -437,7 +372,11 @@ local LIST_EVENTS = {
 }
 
 local function buildPanel()
-    local frame = createWindow()
+    -- The window starts at its empty height; Resize grows it with the content on every show.
+    local frame = UI.CreateWindow({
+        name = "ChatScanFrame", title = ns.TITLE, icon = ns.ICON,
+        width = PANEL_W, height = CHROME_H,
+    })
     local left, right = createColumns(frame)
 
     local channelsSection = createSection(left, "Scanned Channels",
@@ -452,6 +391,10 @@ local function buildPanel()
         "Pick which chat tabs receive matches. With none selected, matches go to the default chat frame.")
     local soundSection = createSection(right, "Alert Sound",
         "Play a sound when a keyword matches, at most once every 3 seconds.")
+    local leftSections = { channelsSection, streamsSection, keywordsSection }
+    local rightSections = { chatTypesSection, outputsSection, soundSection }
+    stackSections(leftSections)
+    stackSections(rightSections)
 
     local channelList = createCheckList(channelsSection.content, "Not in any channels")
     local streamList = createCheckList(streamsSection.content, "")
@@ -462,7 +405,11 @@ local function buildPanel()
     end)
     local soundCheck, soundDropdown, soundH = createSoundControls(soundSection.content)
     local status = createStatusLine(frame, right)
-    local startBtn = createStartButton(frame)
+
+    -- The primary action takes the button bar's bottom-right corner.
+    local startBtn = UI.AddBarButton(frame, "Start", function()
+        if Scanner.scanning then Scanner.Stop() else Scanner.Start() end
+    end)
 
     -- The button label and the status line show whether a scan runs.
     function frame:RefreshStatus()
@@ -472,23 +419,23 @@ local function buildPanel()
             -- A running scan can be unable to match while the client withholds chat text, or once
             -- every keyword or source is gone.
             if Scanner.chatLocked then
-                status:SetText(WARNING_FONT_COLOR:WrapTextInColorCode("Chat locked by client") .. "  matching paused")
+                status:SetText(UI.Color.warn:WrapTextInColorCode("Chat locked by client") .. "  matching paused")
             elseif not Scanner.CanMatch() then
-                status:SetText(WARNING_FONT_COLOR:WrapTextInColorCode("Nothing to match") .. "  add a keyword and tick a source")
+                status:SetText(UI.Color.warn:WrapTextInColorCode("Nothing to match") .. "  add a keyword and tick a source")
             else
-                status:SetText(GREEN_FONT_COLOR:WrapTextInColorCode("Scanning") .. "  " .. count)
+                status:SetText(UI.Color.good:WrapTextInColorCode("Scanning") .. "  " .. count)
             end
         else
             startBtn:SetText("Start")
             if Scanner.matchCount > 0 then
-                status:SetText(GRAY_FONT_COLOR:WrapTextInColorCode("Stopped") .. "  " .. count .. " this session")
+                status:SetText(UI.Color.muted:WrapTextInColorCode("Stopped") .. "  " .. count .. " this session")
             else
-                status:SetText(GRAY_FONT_COLOR:WrapTextInColorCode("Not scanning"))
+                status:SetText(UI.Color.muted:WrapTextInColorCode("Not scanning"))
             end
         end
     end
 
-    local channelsH, streamsH, keywordsH, outputsH = ROW_H, ROW_H, ROW_H, ROW_H
+    local channelsH, streamsH, keywordsH, outputsH = UI.Size.row, UI.Size.row, UI.Size.row, UI.Size.row
 
     -- The window grows with its content: the attic, the taller well and the button bar.
     function frame:Resize()
@@ -498,9 +445,7 @@ local function buildPanel()
         chatTypesSection:Layout(chatTypesH)
         outputsSection:Layout(outputsH)
         soundSection:Layout(soundH)
-        local leftH = stackSections(left, { channelsSection, streamsSection, keywordsSection })
-        local rightH = stackSections(right, { chatTypesSection, outputsSection, soundSection })
-        self:SetHeight(math.ceil(-PANEL_INSET_ATTIC_OFFSET + math.max(leftH, rightH) + PANEL_INSET_BOTTOM_BUTTON_OFFSET))
+        self:SetHeight(CHROME_H + math.max(columnHeight(leftSections), columnHeight(rightSections)))
     end
 
     -- Channels and community streams render together, because a stream moves from one list to the
@@ -566,13 +511,13 @@ local function buildPanel()
         if frame:IsShown() then frame:RefreshStatus() end
     end)
 
+    -- The keyword rows and ns.RefreshPanel reach the panel outside the toggle.
+    panel = frame
     return frame
 end
 
-function ns.TogglePanel()
-    panel = panel or buildPanel()
-    panel:SetShown(not panel:IsShown())
-end
+-- One toggle for /cs, the minimap button and the addon menu; the panel is built on first use.
+ns.TogglePanel = UI.CreateToggle(buildPanel)
 
 -- Called after slash commands change keywords, so an open panel mirrors the store.
 function ns.RefreshPanel()

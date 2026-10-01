@@ -1,5 +1,7 @@
 local _, ns = ...
 
+local UI = LibStub("LibNativeUI-1.0")
+
 local Scanner = {
     scanning = false,
     matchCount = 0,
@@ -100,7 +102,7 @@ end
 
 -- Only the time stamp in front is ChatScan's own; the rest of the line is Blizzard's.
 local function forward(line, r, g, b, id)
-    local stamp = GRAY_FONT_COLOR:WrapTextInColorCode("[" .. date("%H:%M") .. "]")
+    local stamp = UI.Color.muted:WrapTextInColorCode("[" .. date("%H:%M") .. "]")
     deliver(stamp .. " " .. line, r, g, b, id)
 
     Scanner.matchCount = Scanner.matchCount + 1
@@ -120,7 +122,7 @@ local LOCKDOWN_NOTICE = "The client is withholding chat text from addons (chat m
 local function setChatLocked(locked)
     if Scanner.chatLocked == locked then return end
     Scanner.chatLocked = locked
-    ns.notify(locked and LOCKDOWN_NOTICE or "Chat text is readable again, scanning resumed.")
+    UI.Print(ns.TITLE, locked and LOCKDOWN_NOTICE or "Chat text is readable again, scanning resumed.")
     fireChanged()
 end
 
@@ -221,9 +223,9 @@ local function begin(isResume)
         if isResume then
             store.scanEnabled = false
         elseif #keywordGroups == 0 then
-            ns.notify("No keywords entered. Open the scan panel to configure.")
+            UI.Print(ns.TITLE, "No keywords entered. Open the scan panel to configure.")
         else
-            ns.notify("No channels or chat types selected. Open the scan panel to configure.")
+            UI.Print(ns.TITLE, "No channels or chat types selected. Open the scan panel to configure.")
         end
         return
     end
@@ -238,11 +240,11 @@ local function begin(isResume)
     Scanner.scanning = true
     Scanner.matchCount = 0
     store.scanEnabled = true
-    ns.notify(string.format("Scanning %d source(s) for %d keyword group(s).", sources, #keywordGroups))
+    UI.Print(ns.TITLE, string.format("Scanning %d source(s) for %d keyword group(s).", sources, #keywordGroups))
 
     -- Surfaced at start, so a scan that cannot match never looks healthy.
     Scanner.chatLocked = C_ChatInfo.InChatMessagingLockdown()
-    if Scanner.chatLocked then ns.notify(LOCKDOWN_NOTICE) end
+    if Scanner.chatLocked then UI.Print(ns.TITLE, LOCKDOWN_NOTICE) end
     fireChanged()
 end
 
@@ -259,6 +261,6 @@ function Scanner.Stop()
     Scanner.scanning = false
     Scanner.chatLocked = false
     ns.Store.Get().scanEnabled = false
-    ns.notify("Scan stopped.")
+    UI.Print(ns.TITLE, "Scan stopped.")
     fireChanged()
 end
