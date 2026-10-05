@@ -1,4 +1,1 @@
 package-as: ChatScan
-
-ignore:
-  - MEMORY.md
